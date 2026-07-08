@@ -1,0 +1,94 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurar O2 Cloud Backup",
+        "description": "Lo más fácil: ejecuta extract_o2_credentials.py y pega el contenido de o2_credentials.json en el campo 'Credentials JSON'. Si no, rellena Validation Key + Cookies + User-Agent manualmente.",
+        "data": {
+          "credentials_json": "Credentials JSON (pega el contenido de o2_credentials.json)",
+          "validation_key": "Validation Key",
+          "cookies": "Cookies (formato JSON, opcional)",
+          "user_agent": "User-Agent",
+          "folder_name": "Nombre de carpeta de backups",
+          "folder_id": "ID de carpeta (por defecto: root)",
+          "refresh_interval": "Intervalo de actualización (minutos)",
+          "include_soft_deleted": "Incluir archivos eliminados"
+        }
+      },
+      "reauth": {
+        "title": "Reautenticar en O2 Cloud",
+        "description": "Tu sesión ha expirado. Vuelve a ejecutar extract_o2_credentials.py y pega el nuevo o2_credentials.json en 'Credentials JSON'.",
+        "data": {
+          "credentials_json": "Credentials JSON (pega el contenido de o2_credentials.json)",
+          "validation_key": "Validation Key",
+          "cookies": "Cookies (formato JSON, opcional)",
+          "user_agent": "User-Agent"
+        }
+      }
+    },
+    "error": {
+      "invalid_credentials": "Credenciales inválidas o conexión fallida",
+      "missing_fields": "Proporciona el Credentials JSON, o rellena Validation Key y User-Agent",
+      "unknown": "Error inesperado"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de O2 Cloud Backup",
+        "data": {
+          "refresh_interval": "Intervalo de actualización de cuota (minutos)",
+          "include_soft_deleted": "Incluir archivos eliminados en el cálculo de cuota"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_bytes": {
+        "name": "Capacidad total"
+      },
+      "used_bytes": {
+        "name": "Capacidad usada"
+      },
+      "free_bytes": {
+        "name": "Capacidad libre"
+      },
+      "used_percent": {
+        "name": "Porcentaje usado"
+      },
+      "last_update": {
+        "name": "Última actualización"
+      }
+    },
+    "binary_sensor": {
+      "session_valid": {
+        "name": "Sesión válida"
+      }
+    }
+  },
+  "services": {
+    "upload_backup": {
+      "name": "Subir backup",
+      "description": "Subir un archivo de backup a O2 Cloud",
+      "fields": {
+        "file_path": {
+          "name": "Ruta del archivo",
+          "description": "Ruta completa del archivo de backup"
+        },
+        "remote_name": {
+          "name": "Nombre remoto",
+          "description": "Opcional: nombre personalizado del archivo en O2 Cloud"
+        }
+      }
+    },
+    "refresh_quota": {
+      "name": "Actualizar cuota",
+      "description": "Forzar actualización de la información de cuota de almacenamiento"
+    },
+    "test_connection": {
+      "name": "Probar conexión",
+      "description": "Probar conexión y validez de la sesión"
+    }
+  }
+}

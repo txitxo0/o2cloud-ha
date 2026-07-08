@@ -1,0 +1,67 @@
+"""Plataforma binary_sensor para O2 Cloud Backup."""
+
+import logging
+
+from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DOMAIN
+from .coordinator import O2CloudCoordinator
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Configurar sensores binarios desde config entry."""
+    data = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = data["coordinator"]
+
+    sensors = [
+        O2CloudSessionValid(coordinator, config_entry),
+    ]
+
+    async_add_entities(sensors)
+
+
+class O2CloudSensorBase(CoordinatorEntity):
+    """Clase base para sensores binarios de O2 Cloud."""
+
+    def __init__(self, coordinator: O2CloudCoordinator, config_entry: ConfigEntry):
+        """Inicializar sensor."""
+        super().__init__(coordinator)
+        self.config_entry = config_entry
+        self._attr_has_entity_name = True
+
+    @property
+    def device_info(self):
+        """Retornar device info."""
+        return {
+            "identifiers": {(DOMAIN, self.config_entry.entry_id)},
+            "name": "O2 Cloud",
+            "manufacturer": "O2 España",
+        }
+
+
+class O2CloudSessionValid(O2CloudSensorBase, BinarySensorEntity):
+    """Sensor de estado de sesión."""
+
+    _attr_unique_id = "o2cloud_session_valid"
+    _attr_icon = "mdi:check-circle"
+    _attr_translation_key = "session_valid"
+
+    @property
+    def is_on(self) -> bool:
+        """Retornar si está activo."""
+        return self.coordinator.is_session_valid
+
+    @property
+    def available(self) -> bool:
+        """Disponibilidad."""
+        return True

@@ -1,0 +1,13 @@
+{
+  "manifest_version": 1,
+  "domain": "o2cloud",
+  "name": "O2 Cloud",
+  "codeowners": ["@usuario"],
+  "config_flow": true,
+  "documentation": "https://github.com/usuario/o2cloud",
+  "requirements": [],
+  "version": "0.2.0",
+  "issue_tracker": "https://github.com/usuario/o2cloud/issues",
+  "homeassistant": "2024.12.0",
+  "integration_type": "service"
+}

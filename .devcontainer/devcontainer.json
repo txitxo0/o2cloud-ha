@@ -1,0 +1,40 @@
+{
+  "name": "O2 Cloud Backup - Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-pyright.pyright"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black",
+        "[python]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "ms-python.python"
+        }
+      }
+    }
+  },
+  
+  "postCreateCommand": "pip install --upgrade pip && pip install aiohttp playwright voluptuous && playwright install",
+  
+  "forwardPorts": [8123],
+  "forwardPortsActivityNotification": false,
+  
+  "remoteUser": "vscode",
+  
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1"
+  }
+}

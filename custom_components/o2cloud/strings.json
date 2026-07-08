@@ -1,0 +1,94 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure O2 Cloud Backup",
+        "description": "Easiest: run extract_o2_credentials.py and paste the whole o2_credentials.json into the 'Credentials JSON' field. Otherwise fill Validation Key + Cookies + User-Agent manually.",
+        "data": {
+          "credentials_json": "Credentials JSON (paste o2_credentials.json content)",
+          "validation_key": "Validation Key",
+          "cookies": "Cookies (JSON format, optional)",
+          "user_agent": "User-Agent",
+          "folder_name": "Backup folder name",
+          "folder_id": "Folder ID (default: root)",
+          "refresh_interval": "Refresh interval (minutes)",
+          "include_soft_deleted": "Include soft-deleted files"
+        }
+      },
+      "reauth": {
+        "title": "Re-authenticate O2 Cloud",
+        "description": "Your session has expired. Run extract_o2_credentials.py again and paste the new o2_credentials.json into 'Credentials JSON'.",
+        "data": {
+          "credentials_json": "Credentials JSON (paste o2_credentials.json content)",
+          "validation_key": "Validation Key",
+          "cookies": "Cookies (JSON format, optional)",
+          "user_agent": "User-Agent"
+        }
+      }
+    },
+    "error": {
+      "invalid_credentials": "Invalid credentials or failed connection",
+      "missing_fields": "Provide the Credentials JSON, or fill Validation Key and User-Agent",
+      "unknown": "Unexpected error"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "O2 Cloud Backup Options",
+        "data": {
+          "refresh_interval": "Quota refresh interval (minutes)",
+          "include_soft_deleted": "Include soft-deleted files in quota calculation"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_bytes": {
+        "name": "Total capacity"
+      },
+      "used_bytes": {
+        "name": "Used capacity"
+      },
+      "free_bytes": {
+        "name": "Free capacity"
+      },
+      "used_percent": {
+        "name": "Used percentage"
+      },
+      "last_update": {
+        "name": "Last update"
+      }
+    },
+    "binary_sensor": {
+      "session_valid": {
+        "name": "Session valid"
+      }
+    }
+  },
+  "services": {
+    "upload_backup": {
+      "name": "Upload backup",
+      "description": "Upload a backup file to O2 Cloud",
+      "fields": {
+        "file_path": {
+          "name": "File path",
+          "description": "Full path to the backup file"
+        },
+        "remote_name": {
+          "name": "Remote name",
+          "description": "Optional: custom name for the file in O2 Cloud"
+        }
+      }
+    },
+    "refresh_quota": {
+      "name": "Refresh quota",
+      "description": "Force refresh of storage quota information"
+    },
+    "test_connection": {
+      "name": "Test connection",
+      "description": "Test connection and session validity"
+    }
+  }
+}
