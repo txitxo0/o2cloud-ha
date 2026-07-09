@@ -163,14 +163,8 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Optional(CONF_CREDENTIALS_JSON, default=""): str,
-                vol.Optional(CONF_VALIDATION_KEY, default=""): str,
-                vol.Optional(CONF_COOKIES, default=""): str,
-                vol.Optional(CONF_USER_AGENT, default=""): str,
+                vol.Required(CONF_CREDENTIALS_JSON, default=""): str,
                 vol.Optional(CONF_FOLDER_NAME, default="homeassistant"): str,
-                vol.Optional(CONF_FOLDER_ID, default="root"): str,
-                vol.Optional(CONF_REFRESH_INTERVAL, default=30): int,
-                vol.Optional(CONF_INCLUDE_SOFT_DELETED, default=False): bool,
             }
         )
 
@@ -178,11 +172,6 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=schema,
             errors=errors,
-            description_placeholders={
-                "login_url": "https://cloud.o2online.es",
-                "instructions": "Abre sesión en O2 Cloud, inspecciona red (F12 > Network), "
-                "busca una request y extrae: validationkey, cookies y User-Agent",
-            },
         )
 
     async def async_step_reauth(
@@ -227,10 +216,7 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Optional(CONF_CREDENTIALS_JSON, default=""): str,
-                vol.Optional(CONF_VALIDATION_KEY, default=""): str,
-                vol.Optional(CONF_COOKIES, default=""): str,
-                vol.Optional(CONF_USER_AGENT, default=""): str,
+                vol.Required(CONF_CREDENTIALS_JSON, default=""): str,
             }
         )
 

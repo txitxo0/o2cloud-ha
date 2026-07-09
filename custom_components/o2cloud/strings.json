@@ -3,32 +3,23 @@
     "step": {
       "user": {
         "title": "Configure O2 Cloud Backup",
-        "description": "Easiest: run extract_o2_credentials.py and paste the whole o2_credentials.json into the 'Credentials JSON' field. Otherwise fill Validation Key + Cookies + User-Agent manually.",
+        "description": "Run this command on a computer with Python:\n\n`python extract_o2_credentials.py`\n\nLog in to O2 in the browser that opens, then copy the JSON it prints in the terminal and paste it below.",
         "data": {
           "credentials_json": "Credentials JSON (paste o2_credentials.json content)",
-          "validation_key": "Validation Key",
-          "cookies": "Cookies (JSON format, optional)",
-          "user_agent": "User-Agent",
-          "folder_name": "Backup folder name",
-          "folder_id": "Folder ID (default: root)",
-          "refresh_interval": "Refresh interval (minutes)",
-          "include_soft_deleted": "Include soft-deleted files"
+          "folder_name": "Backup folder name"
         }
       },
       "reauth": {
         "title": "Re-authenticate O2 Cloud",
-        "description": "Your session has expired. Run extract_o2_credentials.py again and paste the new o2_credentials.json into 'Credentials JSON'.",
+        "description": "Your session has expired. Run extract_o2_credentials.py again and paste the new o2_credentials.json below.",
         "data": {
-          "credentials_json": "Credentials JSON (paste o2_credentials.json content)",
-          "validation_key": "Validation Key",
-          "cookies": "Cookies (JSON format, optional)",
-          "user_agent": "User-Agent"
+          "credentials_json": "Credentials JSON (paste o2_credentials.json content)"
         }
       }
     },
     "error": {
       "invalid_credentials": "Invalid credentials or failed connection",
-      "missing_fields": "Provide the Credentials JSON, or fill Validation Key and User-Agent",
+      "missing_fields": "Paste a valid o2_credentials.json (must contain validation_key and user_agent)",
       "unknown": "Unexpected error"
     }
   },

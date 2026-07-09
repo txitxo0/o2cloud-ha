@@ -12,8 +12,11 @@ Qué hace:
    navegador envía de verdad, no solo las cookies visibles por JS).
 3. Reproduce esa MISMA request desde Python (aiohttp) para comprobar si la
    sesión es replicable fuera del navegador.
-4. Solo guarda las credenciales si la reproducción funciona; de lo contrario
-   informa de que la sesión está atada al navegador (huella/dispositivo).
+4. Solo imprime el JSON de credenciales si la reproducción funciona; de lo
+   contrario informa de que la sesión está atada al navegador.
+
+El JSON se muestra por la terminal para copiarlo y pegarlo en la integración
+(no se guarda ningún fichero).
 
 Requiere: pip install playwright  (y: python -m playwright install chromium)
 """
@@ -21,7 +24,6 @@ Requiere: pip install playwright  (y: python -m playwright install chromium)
 import asyncio
 import json
 import sys
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -33,8 +35,6 @@ except ImportError:
     sys.exit(1)
 
 
-OUTPUT_FILE = Path(__file__).parent / "o2_credentials.json"
-STORAGE_STATE_FILE = Path(__file__).parent / "o2_storage_state.json"
 SAPI_MARKER = "cloud.o2online.es/sapi/"
 
 
@@ -197,13 +197,6 @@ async def extract_credentials():
                 }
                 break
 
-        # Exportar el storage_state completo (incluye cookies HttpOnly) siempre.
-        try:
-            await context.storage_state(path=str(STORAGE_STATE_FILE))
-            print(f"[INFO] Estado de sesión completo guardado en: {STORAGE_STATE_FILE.name}")
-        except Exception as e:  # noqa: BLE001
-            print(f"[WARN] No se pudo guardar storage_state: {e}")
-
         if not verified:
             print()
             print("=" * 70)
@@ -231,16 +224,17 @@ async def extract_credentials():
             "cookie_header": verified["cookie_header"],
         }
 
-        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-            json.dump(credentials, f, indent=2)
-
+        creds_json = json.dumps(credentials, indent=2)
         print()
         print("=" * 70)
-        print("[OK] CREDENCIALES VERIFICADAS Y GUARDADAS")
+        print("[OK] CREDENCIALES VERIFICADAS")
         print("=" * 70)
-        print(f"Validation Key: {verified['validation_key']}")
-        print(f"Cookies: {len(o2_cookies)}")
-        print(f"Guardado en: {OUTPUT_FILE.name}")
+        print("Copia TODO el bloque JSON de abajo y pégalo en la integración")
+        print("(Ajustes > Dispositivos y servicios > O2 Cloud):")
+        print()
+        print("----------------------- COPIAR DESDE AQUÍ -----------------------")
+        print(creds_json)
+        print("------------------------ COPIAR HASTA AQUÍ -----------------------")
         print()
 
         await browser.close()
@@ -254,8 +248,6 @@ async def main():
     credentials = await extract_credentials()
 
     if credentials:
-        print("[OK] Ahora valida en local con:")
-        print("     python test_o2cloud_local.py --credentials .\\o2_credentials.json")
         return 0
 
     print("[ERROR] No se obtuvieron credenciales verificadas.")
