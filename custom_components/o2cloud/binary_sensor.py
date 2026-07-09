@@ -1,4 +1,4 @@
-"""Plataforma binary_sensor para O2 Cloud Backup."""
+"""binary_sensor platform for O2 Cloud Backup."""
 
 import logging
 
@@ -19,7 +19,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Configurar sensores binarios desde config entry."""
+    """Set up binary sensors from config entry."""
     data = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = data["coordinator"]
 
@@ -31,17 +31,17 @@ async def async_setup_entry(
 
 
 class O2CloudSensorBase(CoordinatorEntity):
-    """Clase base para sensores binarios de O2 Cloud."""
+    """Base class for O2 Cloud binary sensors."""
 
     def __init__(self, coordinator: O2CloudCoordinator, config_entry: ConfigEntry):
-        """Inicializar sensor."""
+        """Initialize sensor."""
         super().__init__(coordinator)
         self.config_entry = config_entry
         self._attr_has_entity_name = True
 
     @property
     def device_info(self):
-        """Retornar device info."""
+        """Return device info."""
         return {
             "identifiers": {(DOMAIN, self.config_entry.entry_id)},
             "name": "O2 Cloud",
@@ -50,7 +50,7 @@ class O2CloudSensorBase(CoordinatorEntity):
 
 
 class O2CloudSessionValid(O2CloudSensorBase, BinarySensorEntity):
-    """Sensor de estado de sesión."""
+    """Session status sensor."""
 
     _attr_unique_id = "o2cloud_session_valid"
     _attr_icon = "mdi:check-circle"
@@ -58,10 +58,10 @@ class O2CloudSessionValid(O2CloudSensorBase, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        """Retornar si está activo."""
+        """Return whether it is active."""
         return self.coordinator.is_session_valid
 
     @property
     def available(self) -> bool:
-        """Disponibilidad."""
+        """Availability."""
         return True

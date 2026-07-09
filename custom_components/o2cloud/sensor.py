@@ -1,4 +1,4 @@
-"""Plataforma sensor para O2 Cloud Backup."""
+"""sensor platform for O2 Cloud Backup."""
 
 import logging
 
@@ -13,7 +13,7 @@ from .coordinator import O2CloudCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# Unidad de bytes compatible con distintas versiones de Home Assistant.
+# Bytes unit compatible with different Home Assistant versions.
 try:
     from homeassistant.const import UnitOfDataSize
 
@@ -27,7 +27,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Configurar sensores desde config entry."""
+    """Set up sensors from config entry."""
     data = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = data["coordinator"]
 
@@ -43,17 +43,17 @@ async def async_setup_entry(
 
 
 class O2CloudSensorBase(CoordinatorEntity):
-    """Clase base para sensores de O2 Cloud."""
+    """Base class for O2 Cloud sensors."""
 
     def __init__(self, coordinator: O2CloudCoordinator, config_entry: ConfigEntry):
-        """Inicializar sensor."""
+        """Initialize sensor."""
         super().__init__(coordinator)
         self.config_entry = config_entry
         self._attr_has_entity_name = True
 
     @property
     def device_info(self):
-        """Retornar device info."""
+        """Return device info."""
         return {
             "identifiers": {(DOMAIN, self.config_entry.entry_id)},
             "name": "O2 Cloud",
@@ -62,7 +62,7 @@ class O2CloudSensorBase(CoordinatorEntity):
 
 
 class O2CloudTotalBytes(O2CloudSensorBase, SensorEntity):
-    """Sensor de capacidad total."""
+    """Total capacity sensor."""
 
     _attr_unique_id = "o2cloud_total_bytes"
     _attr_native_unit_of_measurement = _BYTES_UNIT
@@ -72,14 +72,14 @@ class O2CloudTotalBytes(O2CloudSensorBase, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Retornar valor."""
+        """Return value."""
         if self.coordinator.data:
             return self.coordinator.data.get("total_bytes")
         return None
 
 
 class O2CloudUsedBytes(O2CloudSensorBase, SensorEntity):
-    """Sensor de capacidad usada."""
+    """Used capacity sensor."""
 
     _attr_unique_id = "o2cloud_used_bytes"
     _attr_native_unit_of_measurement = _BYTES_UNIT
@@ -89,14 +89,14 @@ class O2CloudUsedBytes(O2CloudSensorBase, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Retornar valor."""
+        """Return value."""
         if self.coordinator.data:
             return self.coordinator.data.get("used_bytes")
         return None
 
 
 class O2CloudFreeBytes(O2CloudSensorBase, SensorEntity):
-    """Sensor de capacidad libre."""
+    """Free capacity sensor."""
 
     _attr_unique_id = "o2cloud_free_bytes"
     _attr_native_unit_of_measurement = _BYTES_UNIT
@@ -106,7 +106,7 @@ class O2CloudFreeBytes(O2CloudSensorBase, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Retornar valor."""
+        """Return value."""
         if self.coordinator.data:
             total = self.coordinator.data.get("total_bytes", 0)
             used = self.coordinator.data.get("used_bytes", 0)
@@ -115,7 +115,7 @@ class O2CloudFreeBytes(O2CloudSensorBase, SensorEntity):
 
 
 class O2CloudUsedPercent(O2CloudSensorBase, SensorEntity):
-    """Sensor de porcentaje usado."""
+    """Used percentage sensor."""
 
     _attr_unique_id = "o2cloud_used_percent"
     _attr_native_unit_of_measurement = "%"
@@ -125,7 +125,7 @@ class O2CloudUsedPercent(O2CloudSensorBase, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Retornar valor."""
+        """Return value."""
         if self.coordinator.data:
             total = self.coordinator.data.get("total_bytes", 0)
             used = self.coordinator.data.get("used_bytes", 0)
@@ -135,7 +135,7 @@ class O2CloudUsedPercent(O2CloudSensorBase, SensorEntity):
 
 
 class O2CloudLastUpdateSensor(O2CloudSensorBase, SensorEntity):
-    """Sensor de última actualización."""
+    """Last update sensor."""
 
     _attr_unique_id = "o2cloud_last_update"
     _attr_icon = "mdi:clock"
@@ -143,7 +143,7 @@ class O2CloudLastUpdateSensor(O2CloudSensorBase, SensorEntity):
 
     @property
     def native_value(self) -> str | None:
-        """Retornar valor."""
+        """Return value."""
         if self.coordinator.data:
             import datetime
             timestamp = self.coordinator.data.get("last_update")

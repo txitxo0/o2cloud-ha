@@ -1,4 +1,4 @@
-"""Inicialización de integración O2 Cloud."""
+"""O2 Cloud integration initialization."""
 
 import json
 import logging
@@ -25,19 +25,19 @@ PLATFORMS: Final = ["sensor", "binary_sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Configurar integración (llamada al arrancar HA)."""
+    """Set up integration (called when HA starts)."""
     hass.data.setdefault(DOMAIN, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Configurar integración desde config entry."""
+    """Set up integration from config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Crear cliente
+    # Create client
     session = async_create_clientsession(hass)
     
-    # Parsear cookies del JSON
+    # Parse cookies from JSON
     cookies_str = entry.data.get(CONF_COOKIES, "{}")
     try:
         cookies = json.loads(cookies_str) if isinstance(cookies_str, str) else cookies_str
@@ -51,7 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session=session,
     )
 
-    # Crear coordinador
+    # Create coordinator
     coordinator = O2CloudCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
@@ -62,17 +62,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "folder_name": entry.data.get(CONF_FOLDER_NAME, "homeassistant"),
     }
 
-    # Configurar platforms
+    # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Listener para recargar cuando cambien opciones
+    # Listener to reload when options change
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Descargar integración."""
+    """Unload integration."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         data = hass.data[DOMAIN].pop(entry.entry_id)
         await data["client"].close()
@@ -81,5 +81,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Escuchar cambios en opciones."""
+    """Listen for changes in options."""
     await hass.config_entries.async_reload(entry.entry_id)

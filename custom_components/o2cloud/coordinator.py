@@ -1,4 +1,4 @@
-"""Coordinador de datos para O2 Cloud."""
+"""Data coordinator for O2 Cloud."""
 
 import logging
 from datetime import timedelta
@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class O2CloudCoordinator(DataUpdateCoordinator):
-    """Coordinador para actualizar datos de O2 Cloud."""
+    """Coordinator to update O2 Cloud data."""
 
     def __init__(
         self,
@@ -23,7 +23,7 @@ class O2CloudCoordinator(DataUpdateCoordinator):
         client: O2CloudClient,
         config_entry,
     ):
-        """Inicializar coordinador."""
+        """Initialize coordinator."""
         super().__init__(
             hass,
             _LOGGER,
@@ -36,9 +36,9 @@ class O2CloudCoordinator(DataUpdateCoordinator):
         self.last_quota_update: Optional[float] = None
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Obtener datos actualizados."""
+        """Get updated data."""
         try:
-            # Obtener información de cuota
+            # Get quota information
             quota_data = await self.client.get_storage_space(
                 include_soft_deleted=self.config_entry.options.get(
                     "include_soft_deleted", False
@@ -48,9 +48,9 @@ class O2CloudCoordinator(DataUpdateCoordinator):
             self.session_valid = True
             self.last_quota_update = self.hass.loop.time()
 
-            # Parsear respuesta de O2 Cloud
-            # La API devuelve algo como: {"quota": int, "used": int}
-            # o {"total": int, "used": int}
+            # Parse O2 Cloud response
+            # The API returns something like: {"quota": int, "used": int}
+            # or {"total": int, "used": int}
             return {
                 "total_bytes": quota_data.get("quota") or quota_data.get("total", 0),
                 "used_bytes": quota_data.get("used", 0),
@@ -61,8 +61,8 @@ class O2CloudCoordinator(DataUpdateCoordinator):
         except O2CloudAuthError as err:
             _LOGGER.warning("Authentication failed, triggering reauth: %s", err)
             self.session_valid = False
-            # ConfigEntryAuthFailed hace que HA inicie automáticamente el flujo de
-            # reautenticación para volver a introducir credenciales frescas.
+            # ConfigEntryAuthFailed makes HA automatically start the
+            # reauthentication flow to enter fresh credentials again.
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
 
         except O2CloudAPIError as err:
@@ -75,5 +75,5 @@ class O2CloudCoordinator(DataUpdateCoordinator):
 
     @property
     def is_session_valid(self) -> bool:
-        """Retornar si la sesión es válida."""
+        """Return whether the session is valid."""
         return self.session_valid

@@ -1,4 +1,4 @@
-"""Cliente API para O2 Cloud."""
+"""API client for O2 Cloud."""
 
 import asyncio
 import json
@@ -19,14 +19,14 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Tamaño de página al listar media (la API pagina de 1000 en 1000).
+# Page size when listing media (the API paginates 1000 at a time).
 MEDIA_PAGE_SIZE = 1000
-# Tamaño de chunk para descargas en streaming.
+# Chunk size for streaming downloads.
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def _compact_iso(timestamp: Optional[float] = None) -> str:
-    """Fecha en formato ISO compacto (YYYYMMDDThhmmss) que espera la API."""
+    """Date in compact ISO format (YYYYMMDDThhmmss) expected by the API."""
     dt = (
         datetime.fromtimestamp(timestamp, tz=timezone.utc)
         if timestamp is not None
@@ -36,7 +36,7 @@ def _compact_iso(timestamp: Optional[float] = None) -> str:
 
 
 def _guess_content_type(name: str) -> str:
-    """Adivinar content-type básico a partir del nombre."""
+    """Guess basic content-type from the name."""
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     return {
         "json": "application/json",
@@ -45,7 +45,7 @@ def _guess_content_type(name: str) -> str:
 
 
 def _as_int(value: Any, default: int = 0) -> int:
-    """Convertir un id (que la API devuelve como número o string) a int."""
+    """Convert an id (returned by the API as number or string) to int."""
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -54,7 +54,7 @@ def _as_int(value: Any, default: int = 0) -> int:
 
 
 class O2CloudClient:
-    """Cliente para interactuar con la API de O2 Cloud."""
+    """Client to interact with the O2 Cloud API."""
 
     def __init__(
         self,
@@ -63,14 +63,14 @@ class O2CloudClient:
         user_agent: str,
         session: Optional[aiohttp.ClientSession] = None,
     ):
-        """Inicializar cliente."""
+        """Initialize client."""
         self.validation_key = validation_key
         self.cookies = cookies if cookies else {}
         self.user_agent = user_agent
         self.session = session
         self._own_session = session is None
         
-        # Log para debugging
+        # Log for debugging
         _LOGGER.debug(
             "O2CloudClient initialized with %d cookies, validation_key: %s...",
             len(self.cookies),
@@ -89,15 +89,15 @@ class O2CloudClient:
             await self.session.close()
 
     async def close(self):
-        """Cerrar sesión."""
+        """Close session."""
         if self._own_session and self.session:
             await self.session.close()
 
     def _get_headers(self) -> Dict[str, str]:
-        """Obtener headers estándar.
+        """Get standard headers.
 
-        Nota: se mantienen mínimos a propósito. Reenviar Accept-Encoding con
-        br/zstd o pseudo-headers HTTP/2 provoca respuestas 400 del backend.
+        Note: kept minimal on purpose. Forwarding Accept-Encoding with
+        br/zstd or HTTP/2 pseudo-headers causes 400 responses from the backend.
         """
         return {
             "User-Agent": self.user_agent,
@@ -108,13 +108,13 @@ class O2CloudClient:
         }
 
     def _build_query_params(self, **kwargs) -> str:
-        """Construir parámetros de query con validationkey."""
+        """Build query parameters with validationkey."""
         params = {**kwargs, "validationkey": self.validation_key}
         return urlencode(params)
 
     @staticmethod
     def _unwrap_data(result: Any) -> Any:
-        """Desenvolver el wrapper SAPI {"data": ...} de las respuestas."""
+        """Unwrap the SAPI {"data": ...} wrapper from responses."""
         if isinstance(result, dict) and isinstance(result.get("data"), str):
             try:
                 result = json.loads(result["data"])
@@ -130,7 +130,7 @@ class O2CloudClient:
         url: str,
         **kwargs,
     ) -> Dict[str, Any]:
-        """Hacer request HTTP."""
+        """Make HTTP request."""
         if not self.session:
             raise RuntimeError("Session not initialized")
 
@@ -181,7 +181,7 @@ class O2CloudClient:
             raise O2CloudConnectionError(f"Connection error: {e}")
 
     async def get_storage_space(self, include_soft_deleted: bool = False) -> Dict[str, Any]:
-        """Obtener espacio de almacenamiento."""
+        """Get storage space."""
         query = self._build_query_params(
             action="get-storage-space",
             softdeleted="true" if include_soft_deleted else "false",
@@ -190,8 +190,8 @@ class O2CloudClient:
 
         result = await self._make_request("GET", url)
 
-        # _make_request puede devolver el JSON ya parseado o {"data": texto_crudo}.
-        # La API real responde: {"data": {quota,...}, "responsetime": ...}
+        # _make_request may return the already-parsed JSON or {"data": raw_text}.
+        # The real API responds: {"data": {quota,...}, "responsetime": ...}
         if isinstance(result, dict) and isinstance(result.get("data"), str):
             try:
                 result = json.loads(result["data"])
@@ -203,7 +203,7 @@ class O2CloudClient:
         return result
 
     async def get_all_folders(self) -> List[Dict[str, Any]]:
-        """Listar TODAS las carpetas (lista plana con id/name/parentid)."""
+        """List ALL folders (flat list with id/name/parentid)."""
         query = self._build_query_params(action="get")
         url = f"{API_BASE_URL}media/folder?{query}"
         result = await self._make_request("POST", url)
@@ -213,7 +213,7 @@ class O2CloudClient:
         return []
 
     async def get_all_media(self) -> List[Dict[str, Any]]:
-        """Listar TODOS los archivos (paginado). Incluye url de descarga."""
+        """List ALL files (paginated). Includes download url."""
         all_items: List[Dict[str, Any]] = []
         offset = 0
         while True:
@@ -240,7 +240,7 @@ class O2CloudClient:
         folder_name: str,
         parent_id: int,
     ) -> int:
-        """Crear carpeta y devolver su id numérico."""
+        """Create folder and return its numeric id."""
         now = _compact_iso()
         query = self._build_query_params(action="save")
         url = f"{API_BASE_URL}media/folder?{query}"
@@ -261,14 +261,14 @@ class O2CloudClient:
         if folder_id is None and isinstance(result, dict):
             folder_id = result.get("id")
         if folder_id is None:
-            raise O2CloudAPIError(f"No se recibió id al crear carpeta: {result}")
+            raise O2CloudAPIError(f"No id received when creating folder: {result}")
         return _as_int(folder_id)
 
     async def resolve_folder_id(self, folder: str) -> int:
-        """Resolver un nombre de carpeta a su id numérico.
+        """Resolve a folder name to its numeric id.
 
-        Acepta un id numérico (lo devuelve tal cual), "root"/"/"/"" (raíz) o
-        un nombre de carpeta bajo la raíz (la crea si no existe).
+        Accepts a numeric id (returns it as-is), "root"/"/"/"" (root) or
+        a folder name under the root (creates it if it does not exist).
         """
         value = str(folder).strip()
         if value.isdigit():
@@ -286,7 +286,7 @@ class O2CloudClient:
             if f.get("name") == value and _as_int(f.get("parentid")) == root_id:
                 return _as_int(f.get("id"))
 
-        _LOGGER.info("Carpeta '%s' no existe, creándola en la raíz", value)
+        _LOGGER.info("Folder '%s' does not exist, creating it at the root", value)
         return await self.create_folder(value, root_id)
 
     async def upload_metadata(
@@ -296,7 +296,7 @@ class O2CloudClient:
         folder_id: int,
         mtime: Optional[float] = None,
     ) -> str:
-        """Paso 1: guardar metadatos y devolver el media id."""
+        """Step 1: save metadata and return the media id."""
         now = _compact_iso(mtime)
         metadata = {
             "data": {
@@ -329,7 +329,7 @@ class O2CloudClient:
             media_id = meta_result.get("id")
         if not media_id:
             raise O2CloudAPIError(
-                f"No se recibió media id en save-metadata: {meta_result}"
+                f"No media id received in save-metadata: {meta_result}"
             )
         return str(media_id)
 
@@ -339,10 +339,10 @@ class O2CloudClient:
         size: int,
         stream: AsyncIterator[bytes],
     ) -> None:
-        """Paso 2: subir los bytes crudos (en streaming) al host de subida.
+        """Step 2: upload the raw bytes (streaming) to the upload host.
 
-        Se usa transferencia chunked; O2 conoce el tamaño por la cabecera
-        x-funambol-file-size, así que no necesita Content-Length.
+        Chunked transfer is used; O2 knows the size from the
+        x-funambol-file-size header, so it does not need Content-Length.
         """
         query = self._build_query_params(
             action="save",
@@ -370,7 +370,7 @@ class O2CloudClient:
         folder_id: int,
         remote_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Subir un archivo del disco (lee en executor, sube en streaming)."""
+        """Upload a file from disk (reads in executor, uploads in streaming)."""
         loop = asyncio.get_running_loop()
         if not remote_name:
             remote_name = os.path.basename(file_path)
@@ -404,7 +404,7 @@ class O2CloudClient:
         }
 
     async def download(self, url: str) -> AsyncIterator[bytes]:
-        """Descargar bytes en streaming desde una URL firmada de media."""
+        """Download bytes in streaming from a signed media URL."""
         if not self.session:
             raise RuntimeError("Session not initialized")
         async with self.session.get(
@@ -422,7 +422,7 @@ class O2CloudClient:
                 yield chunk
 
     async def download_bytes(self, url: str) -> bytes:
-        """Descargar el contenido completo de una URL (para ficheros pequeños)."""
+        """Download the full content of a URL (for small files)."""
         data = bytearray()
         async for chunk in self.download(url):
             data.extend(chunk)
@@ -433,7 +433,7 @@ class O2CloudClient:
         file_id: str,
         soft_delete: bool = True,
     ) -> Dict[str, Any]:
-        """Eliminar (mover a papelera) un archivo por su id."""
+        """Delete (move to trash) a file by its id."""
         query = self._build_query_params(
             action="softdelete" if soft_delete else "delete",
             id=str(file_id),
@@ -442,7 +442,7 @@ class O2CloudClient:
         return await self._make_request("POST", url)
 
     async def test_connection(self) -> bool:
-        """Probar conexión y validez de sesión."""
+        """Test connection and session validity."""
         try:
             _LOGGER.debug("Testing connection with %d cookies", len(self.cookies))
             result = await self.get_storage_space()
@@ -456,30 +456,30 @@ class O2CloudClient:
 
 
 class O2CloudException(Exception):
-    """Excepción base para O2 Cloud."""
+    """Base exception for O2 Cloud."""
 
     pass
 
 
 class O2CloudAuthError(O2CloudException):
-    """Error de autenticación."""
+    """Authentication error."""
 
     pass
 
 
 class O2CloudAPIError(O2CloudException):
-    """Error de API."""
+    """API error."""
 
     pass
 
 
 class O2CloudTimeoutError(O2CloudException):
-    """Error de timeout."""
+    """Timeout error."""
 
     pass
 
 
 class O2CloudConnectionError(O2CloudException):
-    """Error de conexión."""
+    """Connection error."""
 
     pass
