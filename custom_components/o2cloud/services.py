@@ -1,21 +1,20 @@
 """Servicios para integración O2 Cloud Backup."""
 
 import logging
-from typing import Any
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.service import verify_domain_control
 
+from .client import O2CloudAPIError, O2CloudClient
 from .const import (
-    DOMAIN,
-    SERVICE_UPLOAD_BACKUP,
-    SERVICE_REFRESH_QUOTA,
-    SERVICE_TEST_CONNECTION,
     ATTR_FILE_PATH,
     ATTR_REMOTE_NAME,
+    DOMAIN,
+    SERVICE_REFRESH_QUOTA,
+    SERVICE_TEST_CONNECTION,
+    SERVICE_UPLOAD_BACKUP,
 )
-from .client import O2CloudClient, O2CloudAPIError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,9 +63,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             _LOGGER.info("Uploading backup: %s", file_path)
 
+            folder_id = await client.resolve_folder_id(
+                entry.data.get("folder_name")
+                or entry.data.get("folder_id")
+                or "homeassistant"
+            )
             result = await client.upload_file(
                 file_path=file_path,
-                folder_id=entry.data.get("folder_id", "root"),
+                folder_id=folder_id,
                 remote_name=remote_name,
             )
 

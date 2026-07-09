@@ -3,7 +3,9 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+import os
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator, Dict, List, Optional
 from urllib.parse import urlencode
 
 import aiohttp
@@ -16,6 +18,39 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Tamaño de página al listar media (la API pagina de 1000 en 1000).
+MEDIA_PAGE_SIZE = 1000
+# Tamaño de chunk para descargas en streaming.
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _compact_iso(timestamp: Optional[float] = None) -> str:
+    """Fecha en formato ISO compacto (YYYYMMDDThhmmss) que espera la API."""
+    dt = (
+        datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        if timestamp is not None
+        else datetime.now(timezone.utc)
+    )
+    return dt.strftime("%Y%m%dT%H%M%S")
+
+
+def _guess_content_type(name: str) -> str:
+    """Adivinar content-type básico a partir del nombre."""
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return {
+        "json": "application/json",
+        "txt": "text/plain",
+    }.get(ext, "application/octet-stream")
+
+
+def _as_int(value: Any, default: int = 0) -> int:
+    """Convertir un id (que la API devuelve como número o string) a int."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 
 
 class O2CloudClient:
@@ -77,6 +112,18 @@ class O2CloudClient:
         params = {**kwargs, "validationkey": self.validation_key}
         return urlencode(params)
 
+    @staticmethod
+    def _unwrap_data(result: Any) -> Any:
+        """Desenvolver el wrapper SAPI {"data": ...} de las respuestas."""
+        if isinstance(result, dict) and isinstance(result.get("data"), str):
+            try:
+                result = json.loads(result["data"])
+            except json.JSONDecodeError:
+                return {}
+        if isinstance(result, dict) and "data" in result:
+            return result["data"]
+        return result
+
     async def _make_request(
         self,
         method: str,
@@ -106,7 +153,13 @@ class O2CloudClient:
 
                 if resp.status in (401, 403):
                     text = await resp.text()
-                    _LOGGER.error(f"Auth failed (status {resp.status}): {text[:200]}")
+                    _LOGGER.error(
+                        "Auth failed (status %s) on %s %s: %s",
+                        resp.status,
+                        method,
+                        url,
+                        text[:200],
+                    )
                     raise O2CloudAuthError(f"Authentication failed: {resp.status}")
 
                 if resp.status >= 400:
@@ -149,107 +202,244 @@ class O2CloudClient:
             return result["data"]
         return result
 
-    async def list_folder(
-        self,
-        parent_id: str,
-        limit: int = 200,
-    ) -> Dict[str, Any]:
-        """Listar contenido de carpeta."""
-        query = self._build_query_params(
-            action="list",
-            parentid=parent_id,
-            limit=limit,
-        )
+    async def get_all_folders(self) -> List[Dict[str, Any]]:
+        """Listar TODAS las carpetas (lista plana con id/name/parentid)."""
+        query = self._build_query_params(action="get")
         url = f"{API_BASE_URL}media/folder?{query}"
+        result = await self._make_request("POST", url)
+        data = self._unwrap_data(result)
+        if isinstance(data, dict) and isinstance(data.get("folders"), list):
+            return data["folders"]
+        return []
 
-        return await self._make_request("GET", url)
+    async def get_all_media(self) -> List[Dict[str, Any]]:
+        """Listar TODOS los archivos (paginado). Incluye url de descarga."""
+        all_items: List[Dict[str, Any]] = []
+        offset = 0
+        while True:
+            query = self._build_query_params(
+                action="get",
+                limit=MEDIA_PAGE_SIZE,
+                offset=offset,
+            )
+            url = f"{API_BASE_URL}media?{query}"
+            payload = {
+                "data": {"fields": ["name", "size", "etag", "folderid", "url"]}
+            }
+            result = await self._make_request("POST", url, json=payload)
+            data = self._unwrap_data(result)
+            items = data.get("media", []) if isinstance(data, dict) else []
+            all_items.extend(items)
+            if len(items) < MEDIA_PAGE_SIZE:
+                break
+            offset += MEDIA_PAGE_SIZE
+        return all_items
 
     async def create_folder(
         self,
-        parent_id: str,
         folder_name: str,
-    ) -> Dict[str, Any]:
-        """Crear carpeta."""
+        parent_id: int,
+    ) -> int:
+        """Crear carpeta y devolver su id numérico."""
+        now = _compact_iso()
         query = self._build_query_params(action="save")
         url = f"{API_BASE_URL}media/folder?{query}"
-
         payload = {
-            "parentid": parent_id,
-            "name": folder_name,
+            "data": {
+                "creationdate": now,
+                "magic": False,
+                "modificationdate": now,
+                "name": folder_name,
+                "parentid": int(parent_id),
+            }
         }
+        result = await self._make_request("POST", url, json=payload)
+        data = self._unwrap_data(result)
+        folder_id = None
+        if isinstance(data, dict):
+            folder_id = data.get("id") or (data.get("folder") or {}).get("id")
+        if folder_id is None and isinstance(result, dict):
+            folder_id = result.get("id")
+        if folder_id is None:
+            raise O2CloudAPIError(f"No se recibió id al crear carpeta: {result}")
+        return _as_int(folder_id)
 
-        return await self._make_request(
+    async def resolve_folder_id(self, folder: str) -> int:
+        """Resolver un nombre de carpeta a su id numérico.
+
+        Acepta un id numérico (lo devuelve tal cual), "root"/"/"/"" (raíz) o
+        un nombre de carpeta bajo la raíz (la crea si no existe).
+        """
+        value = str(folder).strip()
+        if value.isdigit():
+            return int(value)
+
+        folders = await self.get_all_folders()
+        root_id = next(
+            (_as_int(f.get("id")) for f in folders if f.get("name") == "/"),
+            0,
+        )
+        if value in ("", "root", "/"):
+            return root_id
+
+        for f in folders:
+            if f.get("name") == value and _as_int(f.get("parentid")) == root_id:
+                return _as_int(f.get("id"))
+
+        _LOGGER.info("Carpeta '%s' no existe, creándola en la raíz", value)
+        return await self.create_folder(value, root_id)
+
+    async def upload_metadata(
+        self,
+        remote_name: str,
+        size: int,
+        folder_id: int,
+        mtime: Optional[float] = None,
+    ) -> str:
+        """Paso 1: guardar metadatos y devolver el media id."""
+        now = _compact_iso(mtime)
+        metadata = {
+            "data": {
+                "contenttype": _guess_content_type(remote_name),
+                "creationdate": now,
+                "folderid": int(folder_id),
+                "modificationdate": now,
+                "name": remote_name,
+                "size": int(size),
+            }
+        }
+        query = self._build_query_params(
+            action="save-metadata",
+            responsetime="true",
+            lastupdate="true",
+        )
+        meta_url = f"{API_BASE_URL}upload/file?{query}"
+        meta_body = json.dumps(metadata).encode("utf-8")
+        meta_result = await self._make_request(
             "POST",
-            url,
-            json=payload,
+            meta_url,
+            data=meta_body,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        meta_data = self._unwrap_data(meta_result)
+        media_id = None
+        if isinstance(meta_data, dict):
+            media_id = meta_data.get("id") or (meta_data.get("file") or {}).get("id")
+        if media_id is None and isinstance(meta_result, dict):
+            media_id = meta_result.get("id")
+        if not media_id:
+            raise O2CloudAPIError(
+                f"No se recibió media id en save-metadata: {meta_result}"
+            )
+        return str(media_id)
+
+    async def upload_stream(
+        self,
+        media_id: str,
+        size: int,
+        stream: AsyncIterator[bytes],
+    ) -> None:
+        """Paso 2: subir los bytes crudos (en streaming) al host de subida.
+
+        Se usa transferencia chunked; O2 conoce el tamaño por la cabecera
+        x-funambol-file-size, así que no necesita Content-Length.
+        """
+        query = self._build_query_params(
+            action="save",
+            id=str(media_id),
+            lastupdate="true",
+            acceptasynchronous="true",
+        )
+        upload_url = f"{UPLOAD_BASE_URL}?{query}"
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "x-funambol-file-size": str(size),
+            "x-funambol-id": str(media_id),
+        }
+        await self._make_request(
+            "POST",
+            upload_url,
+            data=stream,
+            headers=headers,
+            timeout=UPLOAD_TIMEOUT,
         )
 
     async def upload_file(
         self,
         file_path: str,
-        folder_id: str,
+        folder_id: int,
         remote_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Subir archivo a O2 Cloud."""
+        """Subir un archivo del disco (lee en executor, sube en streaming)."""
+        loop = asyncio.get_running_loop()
         if not remote_name:
-            import os
             remote_name = os.path.basename(file_path)
 
-        # Primer paso: obtener ID de upload
-        query = self._build_query_params(action="init")
-        init_url = f"{UPLOAD_BASE_URL}?{query}"
+        file_size = await loop.run_in_executor(None, os.path.getsize, file_path)
+        mtime = await loop.run_in_executor(None, os.path.getmtime, file_path)
 
-        init_resp = await self._make_request("POST", init_url)
-        upload_id = init_resp.get("uploadid") or init_resp.get("uploadId")
+        media_id = await self.upload_metadata(
+            remote_name, file_size, folder_id, mtime
+        )
 
-        if not upload_id:
-            raise O2CloudAPIError("No upload ID received from server")
+        async def _file_stream() -> AsyncIterator[bytes]:
+            f = await loop.run_in_executor(None, open, file_path, "rb")
+            try:
+                while True:
+                    chunk = await loop.run_in_executor(
+                        None, f.read, DOWNLOAD_CHUNK_SIZE
+                    )
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                await loop.run_in_executor(None, f.close)
 
-        # Segundo paso: subir archivo
-        import os
-        file_size = os.path.getsize(file_path)
-
-        with open(file_path, "rb") as f:
-            files = {
-                "file": (remote_name, f, "application/octet-stream"),
-            }
-
-            params = {
-                "uploadid": upload_id,
-                "folderid": folder_id,
-            }
-            query = self._build_query_params(**params)
-            upload_url = f"{UPLOAD_BASE_URL}?{query}"
-
-            result = await self._make_request(
-                "POST",
-                upload_url,
-                data=files,
-                timeout=UPLOAD_TIMEOUT,
-            )
+        await self.upload_stream(media_id, file_size, _file_stream())
 
         return {
             "file_name": remote_name,
             "file_size": file_size,
-            "upload_id": upload_id,
-            "timestamp": result.get("timestamp"),
+            "media_id": media_id,
         }
+
+    async def download(self, url: str) -> AsyncIterator[bytes]:
+        """Descargar bytes en streaming desde una URL firmada de media."""
+        if not self.session:
+            raise RuntimeError("Session not initialized")
+        async with self.session.get(
+            url,
+            headers=self._get_headers(),
+            cookies=self.cookies,
+            timeout=aiohttp.ClientTimeout(total=UPLOAD_TIMEOUT),
+        ) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                raise O2CloudAPIError(
+                    f"Download error {resp.status}: {text[:200]}"
+                )
+            async for chunk in resp.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
+                yield chunk
+
+    async def download_bytes(self, url: str) -> bytes:
+        """Descargar el contenido completo de una URL (para ficheros pequeños)."""
+        data = bytearray()
+        async for chunk in self.download(url):
+            data.extend(chunk)
+        return bytes(data)
 
     async def delete_file(
         self,
         file_id: str,
         soft_delete: bool = True,
     ) -> Dict[str, Any]:
-        """Eliminar archivo."""
+        """Eliminar (mover a papelera) un archivo por su id."""
         query = self._build_query_params(
-            action="delete",
-            softdelete="true" if soft_delete else "false",
+            action="softdelete" if soft_delete else "delete",
+            id=str(file_id),
         )
-        url = f"{API_BASE_URL}media/file?{query}"
-
-        payload = {"fileid": file_id}
-
-        return await self._make_request("POST", url, json=payload)
+        url = f"{API_BASE_URL}media?{query}"
+        return await self._make_request("POST", url)
 
     async def test_connection(self) -> bool:
         """Probar conexión y validez de sesión."""

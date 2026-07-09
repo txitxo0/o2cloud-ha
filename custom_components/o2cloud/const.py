@@ -15,7 +15,8 @@ DEFAULT_MAX_UPLOAD_SIZE_MB = 1024  # 1GB
 DEFAULT_INCLUDE_SOFT_DELETED = False
 
 API_BASE_URL = "https://cloud.o2online.es/sapi/"
-UPLOAD_BASE_URL = "https://upload.cloud.o2online.es/sapi/upload"
+# El binario del archivo se sube a un host separado (Synchronoss OMH).
+UPLOAD_BASE_URL = "https://upload.cloud.o2online.es/sapi/upload/file"
 
 # Timeouts
 REQUEST_TIMEOUT = 30
@@ -34,4 +35,7 @@ ATTR_MAX_BACKUPS = "max_backups"
 ATTR_MAX_DAYS = "max_days"
 
 # Update coordinator
-COORDINATOR_UPDATE_INTERVAL = 30  # minutos
+# Nota: la sesión de O2 caduca por inactividad (~30-45 min). Cada refresco
+# hace una petición real a /sapi, así que actúa como keepalive. Se mantiene
+# muy por debajo del timeout para no dejar caducar la sesión.
+COORDINATOR_UPDATE_INTERVAL = 10  # minutos

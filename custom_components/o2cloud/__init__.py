@@ -9,7 +9,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .client import O2CloudClient
-from .const import CONF_COOKIES, CONF_USER_AGENT, CONF_VALIDATION_KEY, DOMAIN
+from .const import (
+    CONF_COOKIES,
+    CONF_FOLDER_ID,
+    CONF_FOLDER_NAME,
+    CONF_USER_AGENT,
+    CONF_VALIDATION_KEY,
+    DOMAIN,
+)
 from .coordinator import O2CloudCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,6 +58,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinator": coordinator,
+        "folder_id": entry.data.get(CONF_FOLDER_ID, "root"),
+        "folder_name": entry.data.get(CONF_FOLDER_NAME, "homeassistant"),
     }
 
     # Configurar platforms

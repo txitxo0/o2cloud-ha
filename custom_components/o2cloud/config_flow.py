@@ -142,7 +142,7 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_VALIDATION_KEY: user_input[CONF_VALIDATION_KEY],
                             CONF_COOKIES: user_input.get(CONF_COOKIES, ""),
                             CONF_USER_AGENT: user_input[CONF_USER_AGENT],
-                            CONF_FOLDER_NAME: user_input.get(CONF_FOLDER_NAME, "backups"),
+                            CONF_FOLDER_NAME: user_input.get(CONF_FOLDER_NAME, "homeassistant"),
                             CONF_FOLDER_ID: user_input.get(CONF_FOLDER_ID, "root"),
                         },
                         options={
@@ -167,7 +167,7 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_VALIDATION_KEY, default=""): str,
                 vol.Optional(CONF_COOKIES, default=""): str,
                 vol.Optional(CONF_USER_AGENT, default=""): str,
-                vol.Optional(CONF_FOLDER_NAME, default="backups"): str,
+                vol.Optional(CONF_FOLDER_NAME, default="homeassistant"): str,
                 vol.Optional(CONF_FOLDER_ID, default="root"): str,
                 vol.Optional(CONF_REFRESH_INTERVAL, default=30): int,
                 vol.Optional(CONF_INCLUDE_SOFT_DELETED, default=False): bool,
