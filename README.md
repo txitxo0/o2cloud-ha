@@ -100,6 +100,16 @@ Esta integración usa la API interna de O2 Cloud (`cloud.o2online.es/sapi/`), qu
 **no es oficial** y puede cambiar sin previo aviso. Proyecto de uso personal;
 revisa los Términos de Servicio de O2. Sin garantía.
 
+## 🙏 Agradecimientos
+
+El mapeo de la API interna de O2 Cloud (Synchronoss OneMediaHub) no habría sido
+posible sin estos proyectos de referencia. ¡Gracias a sus autores! 🙌
+
+- [danielperez9430/o2cloud-cli](https://github.com/danielperez9430/o2cloud-cli)
+  — CLI de O2 Cloud (flujo de subida en dos pasos y autenticación).
+- [garanda21/o2cloud_gateway_webdav](https://github.com/garanda21/o2cloud_gateway_webdav)
+  — gateway WebDAV para O2 Cloud (login por navegador y manejo de sesión).
+
 ## Licencia
 
 MIT
@@ -208,6 +218,16 @@ JSON.
 This integration uses O2 Cloud's internal API (`cloud.o2online.es/sapi/`), which
 is **not official** and may change without notice. Personal-use project; review
 O2's Terms of Service. No warranty.
+
+## 🙏 Acknowledgements
+
+Mapping O2 Cloud's internal API (Synchronoss OneMediaHub) would not have been
+possible without these reference projects. Thanks to their authors! 🙌
+
+- [danielperez9430/o2cloud-cli](https://github.com/danielperez9430/o2cloud-cli)
+  — O2 Cloud CLI (two-step upload flow and authentication).
+- [garanda21/o2cloud_gateway_webdav](https://github.com/garanda21/o2cloud_gateway_webdav)
+  — WebDAV gateway for O2 Cloud (browser-based login and session handling).
 
 ## License
 
