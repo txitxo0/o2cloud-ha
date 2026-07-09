@@ -1,4 +1,4 @@
-"""Soporte de backup para O2 Cloud."""
+"""Backup support for O2 Cloud."""
 
 import json
 import logging
@@ -32,7 +32,7 @@ BACKUP_SUFFIX = ".tar"
 
 
 def _as_int(value: Any, default: int = 0) -> int:
-    """Convertir un id (número o string) a int."""
+    """Convert an id (number or string) to int."""
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -40,14 +40,14 @@ def _as_int(value: Any, default: int = 0) -> int:
 
 
 def _media_folder_id(item: dict[str, Any]) -> int:
-    """Obtener el id de carpeta de un item de media (campo folderid o folder)."""
+    """Get the folder id of a media item (folderid or folder field)."""
     return _as_int(item.get("folderid", item.get("folder")))
 
 
 async def async_get_backup_agents(
     hass: HomeAssistant,
 ) -> list[BackupAgent]:
-    """Retornar lista de agentes de backup."""
+    """Return list of backup agents."""
     agents = []
     for entry_id, data in hass.data.get(DOMAIN, {}).items():
         if "client" in data:
@@ -58,7 +58,7 @@ async def async_get_backup_agents(
 def handle_backup_errors(
     func: Callable[Concatenate["O2CloudBackupAgent", ...], Coroutine[Any, Any, Any]],
 ):
-    """Decorator para manejar errores de backup."""
+    """Decorator to handle backup errors."""
 
     @wraps(func)
     async def wrapper(
@@ -68,29 +68,29 @@ def handle_backup_errors(
             return await func(self, *args, **kwargs)
         except O2CloudAuthError as err:
             _LOGGER.error("Authentication error: %s", err)
-            raise BackupAgentError("Error de autenticación") from err
+            raise BackupAgentError("Authentication error") from err
         except O2CloudAPIError as err:
             _LOGGER.error("API error: %s", err)
-            raise BackupAgentError("Error de API") from err
+            raise BackupAgentError("API error") from err
         except O2CloudTimeoutError as err:
             _LOGGER.error("Timeout: %s", err)
-            raise BackupAgentError("Timeout en la operación") from err
+            raise BackupAgentError("Timeout during operation") from err
         except Exception as err:
             _LOGGER.error("Unexpected error: %s", err)
-            raise BackupAgentError(f"Error inesperado: {err}") from err
+            raise BackupAgentError(f"Unexpected error: {err}") from err
 
     return wrapper
 
 
 class O2CloudBackupAgent(BackupAgent):
-    """Agente de backup para O2 Cloud."""
+    """Backup agent for O2 Cloud."""
 
     domain = DOMAIN
 
     def __init__(
         self, hass: HomeAssistant, entry_id: str, data: dict[str, Any]
     ) -> None:
-        """Inicializar agente de backup."""
+        """Initialize backup agent."""
         super().__init__()
         self._hass = hass
         self._entry_id = entry_id
@@ -105,13 +105,13 @@ class O2CloudBackupAgent(BackupAgent):
         self._cache_expiration = 0.0
 
     async def _get_folder_id(self) -> int:
-        """Resolver (y cachear) el id numérico de la carpeta de backups."""
+        """Resolve (and cache) the numeric id of the backups folder."""
         if self._folder_id is None:
             self._folder_id = await self._client.resolve_folder_id(
                 self._folder_name
             )
             _LOGGER.debug(
-                "Carpeta de backups '%s' resuelta a id %s",
+                "Backups folder '%s' resolved to id %s",
                 self._folder_name,
                 self._folder_id,
             )
@@ -121,8 +121,8 @@ class O2CloudBackupAgent(BackupAgent):
     @handle_backup_errors
     @override
     async def async_list_backups(self, **kwargs: Any) -> list[AgentBackup]:
-        """Listar backups en O2 Cloud."""
-        _LOGGER.debug("Listando backups en O2 Cloud")
+        """List backups on O2 Cloud."""
+        _LOGGER.debug("Listing backups on O2 Cloud")
 
         if time() <= self._cache_expiration:
             return list(self._cache_backups.values())
@@ -145,7 +145,7 @@ class O2CloudBackupAgent(BackupAgent):
                 backup = AgentBackup.from_dict(json.loads(raw))
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning(
-                    "No se pudo leer metadatos de backup '%s': %s", name, err
+                    "Could not read backup metadata '%s': %s", name, err
                 )
                 continue
             backups[backup.backup_id] = backup
@@ -159,24 +159,24 @@ class O2CloudBackupAgent(BackupAgent):
     async def async_get_backup(
         self, backup_id: str, **kwargs: Any
     ) -> AgentBackup:
-        """Obtener información de un backup específico."""
+        """Get information about a specific backup."""
         backups = await self.async_list_backups()
         for backup in backups:
             if backup.backup_id == backup_id:
                 return backup
-        raise BackupNotFound(f"Backup {backup_id} no encontrado")
+        raise BackupNotFound(f"Backup {backup_id} not found")
 
     @handle_backup_errors
     @override
     async def async_delete_backup(
         self, backup_id: str, **kwargs: Any
     ) -> None:
-        """Eliminar un backup (archivo .tar y sus metadatos)."""
+        """Delete a backup (.tar file and its metadata)."""
         folder_id = await self._get_folder_id()
         tar_name = f"{backup_id}{BACKUP_SUFFIX}"
         metadata_name = f"{backup_id}{METADATA_SUFFIX}"
 
-        _LOGGER.debug("Eliminando backup %s de O2 Cloud", backup_id)
+        _LOGGER.debug("Deleting backup %s from O2 Cloud", backup_id)
 
         media = await self._client.get_all_media()
         deleted = False
@@ -190,14 +190,14 @@ class O2CloudBackupAgent(BackupAgent):
                 await self._client.delete_file(item.get("id"))
                 deleted = True
             except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("Error al eliminar %s: %s", name, err)
+                _LOGGER.warning("Error deleting %s: %s", name, err)
 
-        # Invalidar cache
+        # Invalidate cache
         self._cache_backups.pop(backup_id, None)
         self._cache_expiration = 0.0
 
         if deleted:
-            _LOGGER.info("Backup %s eliminado de O2 Cloud", backup_id)
+            _LOGGER.info("Backup %s deleted from O2 Cloud", backup_id)
 
     @handle_backup_errors
     @override
@@ -209,9 +209,9 @@ class O2CloudBackupAgent(BackupAgent):
         on_progress: OnProgressCallback,
         **kwargs: Any,
     ) -> None:
-        """Subir un backup a O2 Cloud (streaming directo, sin fichero temporal)."""
+        """Upload a backup to O2 Cloud (direct streaming, no temp file)."""
         _LOGGER.info(
-            "Iniciando subida de backup '%s' (%d bytes) a O2 Cloud",
+            "Starting upload of backup '%s' (%d bytes) to O2 Cloud",
             backup.name,
             backup.size,
         )
@@ -220,14 +220,14 @@ class O2CloudBackupAgent(BackupAgent):
         tar_name = f"{backup.backup_id}{BACKUP_SUFFIX}"
         metadata_name = f"{backup.backup_id}{METADATA_SUFFIX}"
 
-        # 1) Subir el .tar en streaming, reportando progreso por chunk.
+        # 1) Upload the .tar via streaming, reporting progress per chunk.
         async def _progress_stream() -> AsyncIterator[bytes]:
             bytes_uploaded = 0
             stream = await open_stream()
             async for chunk in stream:
                 yield chunk
                 bytes_uploaded += len(chunk)
-                # on_progress es SÍNCRONO (no await).
+                # on_progress is SYNCHRONOUS (no await).
                 on_progress(bytes_uploaded=bytes_uploaded)
 
         media_id = await self._client.upload_metadata(
@@ -235,9 +235,9 @@ class O2CloudBackupAgent(BackupAgent):
         )
         await self._client.upload_stream(media_id, backup.size, _progress_stream())
 
-        _LOGGER.debug("Backup subido, guardando metadatos")
+        _LOGGER.debug("Backup uploaded, saving metadata")
 
-        # 2) Subir los metadatos completos del AgentBackup (JSON en memoria).
+        # 2) Upload the full AgentBackup metadata (in-memory JSON).
         meta_bytes = json.dumps(backup.as_dict()).encode("utf-8")
 
         async def _meta_stream() -> AsyncIterator[bytes]:
@@ -251,14 +251,14 @@ class O2CloudBackupAgent(BackupAgent):
         )
 
         _LOGGER.info(
-            "Backup '%s' subido correctamente a O2 Cloud (%d bytes)",
+            "Backup '%s' uploaded successfully to O2 Cloud (%d bytes)",
             backup.name,
             backup.size,
         )
 
-        # Registrar el backup en cache para que las verificaciones
-        # posteriores (async_get_backup / async_list_backups) lo encuentren
-        # a pesar de la latencia de consistencia del listado remoto.
+        # Register the backup in cache so that subsequent checks
+        # (async_get_backup / async_list_backups) find it despite the
+        # consistency latency of the remote listing.
         self._cache_backups[backup.backup_id] = backup
         self._cache_expiration = time() + CACHE_TTL
 
@@ -266,19 +266,19 @@ class O2CloudBackupAgent(BackupAgent):
     async def async_download_backup(
         self, backup_id: str, **kwargs: Any
     ) -> AsyncIterator[bytes]:
-        """Descargar un backup de O2 Cloud."""
+        """Download a backup from O2 Cloud."""
         await self.async_get_backup(backup_id)
         folder_id = await self._get_folder_id()
         tar_name = f"{backup_id}{BACKUP_SUFFIX}"
 
-        _LOGGER.info("Descargando backup '%s' de O2 Cloud", backup_id)
+        _LOGGER.info("Downloading backup '%s' from O2 Cloud", backup_id)
 
         try:
             media = await self._client.get_all_media()
         except O2CloudAuthError as err:
-            raise BackupAgentError("Error de autenticación") from err
+            raise BackupAgentError("Authentication error") from err
         except (O2CloudAPIError, O2CloudTimeoutError) as err:
-            raise BackupAgentError("Error al descargar backup") from err
+            raise BackupAgentError("Error downloading backup") from err
 
         url = None
         for item in media:
@@ -291,7 +291,7 @@ class O2CloudBackupAgent(BackupAgent):
 
         if not url:
             raise BackupNotFound(
-                f"Backup {backup_id} no encontrado en O2 Cloud"
+                f"Backup {backup_id} not found on O2 Cloud"
             )
 
         async for chunk in self._client.download(url):

@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 """
-Extractor de credenciales de O2 Cloud (con verificación real).
+O2 Cloud credentials extractor (with real verification).
 
-Uso:
+Usage:
     python extract_o2_credentials.py
 
-Qué hace:
-1. Abre un navegador real y espera a que inicies sesión manualmente.
-2. Escucha el tráfico real de la SPA hacia /sapi/ y captura una request
-   autenticada COMPLETA (URL + headers reales, incluyendo la cookie que el
-   navegador envía de verdad, no solo las cookies visibles por JS).
-3. Reproduce esa MISMA request desde Python (aiohttp) para comprobar si la
-   sesión es replicable fuera del navegador.
-4. Solo guarda las credenciales si la reproducción funciona; de lo contrario
-   informa de que la sesión está atada al navegador (huella/dispositivo).
+What it does:
+1. Opens a real browser and waits for you to log in manually.
+2. Listens to the SPA's real traffic to /sapi/ and captures a COMPLETE
+   authenticated request (URL + real headers, including the cookie the
+   browser actually sends, not just the cookies visible to JS).
+3. Replays that SAME request from Python (aiohttp) to check whether the
+   session is replicable outside the browser.
+4. Only prints the credentials JSON if the replay works; otherwise it
+   reports that the session is bound to the browser.
 
-Requiere: pip install playwright  (y: python -m playwright install chromium)
+The JSON is shown in the terminal to copy and paste into the integration
+(no file is saved).
+
+Requires: pip install playwright  (and: python -m playwright install chromium)
 """
 
 import asyncio
 import json
 import sys
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -29,17 +31,15 @@ import aiohttp
 try:
     from playwright.async_api import async_playwright
 except ImportError:
-    print("[ERROR] Playwright no instalado. Instala con: pip install playwright")
+    print("[ERROR] Playwright not installed. Install with: pip install playwright")
     sys.exit(1)
 
 
-OUTPUT_FILE = Path(__file__).parent / "o2_credentials.json"
-STORAGE_STATE_FILE = Path(__file__).parent / "o2_storage_state.json"
 SAPI_MARKER = "cloud.o2online.es/sapi/"
 
 
 def _parse_cookie_header(cookie_header: str) -> dict:
-    """Parsear un header Cookie en diccionario."""
+    """Parse a Cookie header into a dictionary."""
     cookies = {}
     for part in (cookie_header or "").split(";"):
         item = part.strip()
@@ -51,7 +51,7 @@ def _parse_cookie_header(cookie_header: str) -> dict:
 
 
 async def _launch_browser(p):
-    """Abrir un Chromium del sistema (Edge/Chrome) o el de Playwright."""
+    """Open a system Chromium (Edge/Chrome) or Playwright's own."""
     errors = []
     for opts in (
         {"channel": "msedge", "headless": False},
@@ -62,10 +62,10 @@ async def _launch_browser(p):
             return await p.chromium.launch(**opts)
         except Exception as e:  # noqa: BLE001
             errors.append(str(e))
-    print("[ERROR] No se pudo abrir un navegador Chromium compatible:")
+    print("[ERROR] Could not open a compatible Chromium browser:")
     for err in errors:
         print(f"   - {err}")
-    print("   Prueba: python -m playwright install chromium")
+    print("   Try: python -m playwright install chromium")
     return None
 
 
@@ -73,7 +73,7 @@ _DROP_HEADERS = {
     "content-length",
     "host",
     "connection",
-    "accept-encoding",  # evitar br/zstd que aiohttp no siempre decodifica
+    "accept-encoding",  # avoid br/zstd that aiohttp does not always decode
     "sec-fetch-dest",
     "sec-fetch-mode",
     "sec-fetch-site",
@@ -84,11 +84,11 @@ _DROP_HEADERS = {
 
 
 def _sanitize_headers(headers: dict) -> dict:
-    """Quitar pseudo-headers HTTP/2 y cabeceras que rompen el replay."""
+    """Remove HTTP/2 pseudo-headers and headers that break the replay."""
     clean = {}
     for k, v in headers.items():
         lk = k.lower()
-        if lk.startswith(":"):  # pseudo-headers HTTP/2 (:method, :authority, ...)
+        if lk.startswith(":"):  # HTTP/2 pseudo-headers (:method, :authority, ...)
             continue
         if lk in _DROP_HEADERS:
             continue
@@ -97,7 +97,7 @@ def _sanitize_headers(headers: dict) -> dict:
 
 
 async def _replay_request(url: str, headers: dict) -> tuple[bool, int, str]:
-    """Reproducir una request exacta desde aiohttp (con la cookie real)."""
+    """Replay an exact request from aiohttp (with the real cookie)."""
     send_headers = _sanitize_headers(headers)
     timeout = aiohttp.ClientTimeout(total=25)
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -108,7 +108,7 @@ async def _replay_request(url: str, headers: dict) -> tuple[bool, int, str]:
 
 
 async def extract_credentials():
-    """Extraer y verificar credenciales de O2 Cloud."""
+    """Extract and verify O2 Cloud credentials."""
     async with async_playwright() as p:
         browser = await _launch_browser(p)
         if browser is None:
@@ -117,7 +117,7 @@ async def extract_credentials():
         context = await browser.new_context()
         page = await context.new_page()
 
-        # Guardamos los objetos Request para poder leer all_headers() (async).
+        # Keep the Request objects so we can read all_headers() (async).
         sapi_requests = []
 
         def _on_request_finished(request):
@@ -126,37 +126,37 @@ async def extract_credentials():
 
         page.on("requestfinished", _on_request_finished)
 
-        print("[INFO] Abriendo O2 Cloud. Inicia sesión manualmente (teléfono + contraseña + SMS).")
-        print("[INFO] Cuando entres a tus archivos, la captura es automática.")
+        print("[INFO] Opening O2 Cloud. Log in manually (phone + password + SMS).")
+        print("[INFO] Once you reach your files, the capture is automatic.")
         print()
 
         try:
             await page.goto("https://cloud.o2online.es", wait_until="domcontentloaded")
         except Exception as e:  # noqa: BLE001
-            print(f"[WARN] Error navegando inicialmente: {e}")
+            print(f"[WARN] Error during initial navigation: {e}")
 
-        print("[INFO] Esperando login y captura de una request /sapi autenticada...")
+        print("[INFO] Waiting for login and capture of an authenticated /sapi request...")
 
-        # Esperar hasta 5 min a que aparezca al menos una request SAPI con validationkey.
+        # Wait up to 5 min for at least one SAPI request with validationkey to appear.
         for _ in range(150):
             if sapi_requests:
                 break
             await asyncio.sleep(2)
 
         if not sapi_requests:
-            print("[ERROR] No se capturó ninguna request /sapi con validationkey.")
-            print("        Asegúrate de entrar a la sección de archivos/almacenamiento.")
+            print("[ERROR] No /sapi request with validationkey was captured.")
+            print("        Make sure you enter the files/storage section.")
             await browser.close()
             return None
 
-        # Forzar algo de tráfico extra por si aún no navegó a media.
+        # Force some extra traffic in case it did not navigate to media yet.
         try:
             await page.goto("https://cloud.o2online.es/#/files", wait_until="domcontentloaded")
             await page.wait_for_timeout(4000)
         except Exception:  # noqa: BLE001
             pass
 
-        print(f"[INFO] Requests /sapi capturadas: {len(sapi_requests)}")
+        print(f"[INFO] /sapi requests captured: {len(sapi_requests)}")
 
         verified = None
         for request in reversed(sapi_requests):
@@ -181,7 +181,7 @@ async def extract_credentials():
             if not cookie_header:
                 continue
 
-            # EXPERIMENTO DECISIVO: reproducir la misma request desde aiohttp.
+            # DECISIVE EXPERIMENT: replay the same request from aiohttp.
             ok, replay_status, body = await _replay_request(url, all_headers)
             print(f"[DEBUG] replay aiohttp -> status={replay_status} ok={ok}")
             if not ok:
@@ -197,25 +197,18 @@ async def extract_credentials():
                 }
                 break
 
-        # Exportar el storage_state completo (incluye cookies HttpOnly) siempre.
-        try:
-            await context.storage_state(path=str(STORAGE_STATE_FILE))
-            print(f"[INFO] Estado de sesión completo guardado en: {STORAGE_STATE_FILE.name}")
-        except Exception as e:  # noqa: BLE001
-            print(f"[WARN] No se pudo guardar storage_state: {e}")
-
         if not verified:
             print()
             print("=" * 70)
-            print("[RESULTADO] La sesion NO es replicable fuera del navegador.")
+            print("[RESULT] The session is NOT replicable outside the browser.")
             print("=" * 70)
-            print("El navegador se autentica, pero al reproducir la MISMA request con")
-            print("las mismas cookies desde Python, el servidor la rechaza. Esto indica")
-            print("verificacion adicional (huella TLS/dispositivo) no replicable con aiohttp.")
+            print("The browser authenticates, but when replaying the SAME request with")
+            print("the same cookies from Python, the server rejects it. This indicates")
+            print("additional verification (TLS/device fingerprint) not replicable with aiohttp.")
             await browser.close()
             return None
 
-        # Éxito: reunir cookies completas (incluye HttpOnly) desde el contexto.
+        # Success: gather full cookies (including HttpOnly) from the context.
         all_cookies = await context.cookies()
         o2_cookies = {
             c["name"]: c["value"]
@@ -231,16 +224,17 @@ async def extract_credentials():
             "cookie_header": verified["cookie_header"],
         }
 
-        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-            json.dump(credentials, f, indent=2)
-
+        creds_json = json.dumps(credentials, indent=2)
         print()
         print("=" * 70)
-        print("[OK] CREDENCIALES VERIFICADAS Y GUARDADAS")
+        print("[OK] CREDENTIALS VERIFIED")
         print("=" * 70)
-        print(f"Validation Key: {verified['validation_key']}")
-        print(f"Cookies: {len(o2_cookies)}")
-        print(f"Guardado en: {OUTPUT_FILE.name}")
+        print("Copy the ENTIRE JSON block below and paste it into the integration")
+        print("(Settings > Devices and services > O2 Cloud):")
+        print()
+        print("----------------------- COPY FROM HERE -----------------------")
+        print(creds_json)
+        print("------------------------ COPY UNTIL HERE -----------------------")
         print()
 
         await browser.close()
@@ -249,16 +243,14 @@ async def extract_credentials():
 
 async def main():
     print()
-    print("EXTRACTOR DE CREDENCIALES O2 CLOUD")
+    print("O2 CLOUD CREDENTIALS EXTRACTOR")
     print("=" * 70)
     credentials = await extract_credentials()
 
     if credentials:
-        print("[OK] Ahora valida en local con:")
-        print("     python test_o2cloud_local.py --credentials .\\o2_credentials.json")
         return 0
 
-    print("[ERROR] No se obtuvieron credenciales verificadas.")
+    print("[ERROR] No verified credentials were obtained.")
     return 1
 
 
@@ -266,10 +258,10 @@ if __name__ == "__main__":
     try:
         sys.exit(asyncio.run(main()))
     except KeyboardInterrupt:
-        print("\n[WARN] Cancelado por usuario")
+        print("\n[WARN] Cancelled by user")
         sys.exit(1)
     except Exception as e:  # noqa: BLE001
-        print(f"\n[ERROR] Error fatal: {e}")
+        print(f"\n[ERROR] Fatal error: {e}")
         import traceback
 
         traceback.print_exc()

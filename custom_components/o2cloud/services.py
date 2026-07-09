@@ -1,4 +1,4 @@
-"""Servicios para integración O2 Cloud Backup."""
+"""Services for O2 Cloud Backup integration."""
 
 import logging
 
@@ -31,10 +31,10 @@ TEST_CONNECTION_SCHEMA = vol.Schema({})
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
-    """Configurar servicios."""
+    """Set up services."""
 
     async def handle_upload_backup(call: ServiceCall) -> None:
-        """Manejar servicio de subida de backup."""
+        """Handle backup upload service."""
         file_path = call.data.get(ATTR_FILE_PATH)
         remote_name = call.data.get(ATTR_REMOTE_NAME)
 
@@ -43,8 +43,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             return
 
         try:
-            # Obtener cliente de la integración
-            # Nota: esto asumeque solo hay una configuración, ajusta según necesidad
+            # Get the integration client
+            # Note: this assumes there is only one configuration, adjust as needed
             entries = hass.config_entries.async_entries(DOMAIN)
             if not entries:
                 _LOGGER.error("No O2 Cloud entry found")
@@ -55,7 +55,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             client: O2CloudClient = data["client"]
             coordinator = data["coordinator"]
 
-            # Subir archivo
+            # Upload file
             import os
             if not os.path.exists(file_path):
                 _LOGGER.error("File not found: %s", file_path)
@@ -76,7 +76,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             _LOGGER.info("Backup uploaded successfully: %s", result)
 
-            # Refrescar cuota
+            # Refresh quota
             await coordinator.async_refresh()
 
         except O2CloudAPIError as err:
@@ -85,7 +85,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Unexpected error during upload: %s", err)
 
     async def handle_refresh_quota(call: ServiceCall) -> None:
-        """Manejar servicio de refresco de cuota."""
+        """Handle quota refresh service."""
         try:
             entries = hass.config_entries.async_entries(DOMAIN)
             if not entries:
@@ -103,7 +103,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error refreshing quota: %s", err)
 
     async def handle_test_connection(call: ServiceCall) -> None:
-        """Manejar servicio de prueba de conexión."""
+        """Handle connection test service."""
         try:
             entries = hass.config_entries.async_entries(DOMAIN)
             if not entries:
@@ -120,7 +120,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         except Exception as err:
             _LOGGER.error("Connection test failed: %s", err)
 
-    # Registrar servicios
+    # Register services
     hass.services.async_register(
         DOMAIN,
         SERVICE_UPLOAD_BACKUP,

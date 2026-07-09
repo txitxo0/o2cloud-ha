@@ -1,4 +1,4 @@
-"""Constantes para integración O2 Cloud."""
+"""Constants for O2 Cloud integration."""
 
 DOMAIN = "o2cloud"
 CONF_VALIDATION_KEY = "validation_key"
@@ -10,12 +10,12 @@ CONF_REFRESH_INTERVAL = "refresh_interval"
 CONF_INCLUDE_SOFT_DELETED = "include_soft_deleted"
 CONF_MAX_UPLOAD_SIZE_MB = "max_upload_size_mb"
 
-DEFAULT_REFRESH_INTERVAL = 30  # minutos
+DEFAULT_REFRESH_INTERVAL = 30  # minutes
 DEFAULT_MAX_UPLOAD_SIZE_MB = 1024  # 1GB
 DEFAULT_INCLUDE_SOFT_DELETED = False
 
 API_BASE_URL = "https://cloud.o2online.es/sapi/"
-# El binario del archivo se sube a un host separado (Synchronoss OMH).
+# The file binary is uploaded to a separate host (Synchronoss OMH).
 UPLOAD_BASE_URL = "https://upload.cloud.o2online.es/sapi/upload/file"
 
 # Timeouts
@@ -35,7 +35,7 @@ ATTR_MAX_BACKUPS = "max_backups"
 ATTR_MAX_DAYS = "max_days"
 
 # Update coordinator
-# Nota: la sesión de O2 caduca por inactividad (~30-45 min). Cada refresco
-# hace una petición real a /sapi, así que actúa como keepalive. Se mantiene
-# muy por debajo del timeout para no dejar caducar la sesión.
-COORDINATOR_UPDATE_INTERVAL = 10  # minutos
+# Note: the O2 session expires from inactivity (~30-45 min). Each refresh
+# makes a real request to /sapi, so it acts as a keepalive. It is kept
+# well below the timeout to avoid letting the session expire.
+COORDINATOR_UPDATE_INTERVAL = 10  # minutes
