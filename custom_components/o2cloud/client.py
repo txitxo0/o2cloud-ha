@@ -356,6 +356,11 @@ class O2CloudClient:
             "x-funambol-file-size": str(size),
             "x-funambol-id": str(media_id),
         }
+        _LOGGER.debug(
+            "Starting binary upload (media_id=%s, size=%d bytes)",
+            media_id,
+            size,
+        )
         await self._make_request(
             "POST",
             upload_url,
@@ -363,6 +368,7 @@ class O2CloudClient:
             headers=headers,
             timeout=UPLOAD_TIMEOUT,
         )
+        _LOGGER.debug("Binary upload finished (media_id=%s)", media_id)
 
     async def upload_file(
         self,

@@ -67,16 +67,16 @@ def handle_backup_errors(
         try:
             return await func(self, *args, **kwargs)
         except O2CloudAuthError as err:
-            _LOGGER.error("Authentication error: %s", err)
-            raise BackupAgentError("Authentication error") from err
+            _LOGGER.error("Authentication error in %s: %s", func.__name__, err)
+            raise BackupAgentError(f"Authentication error: {err}") from err
         except O2CloudAPIError as err:
-            _LOGGER.error("API error: %s", err)
-            raise BackupAgentError("API error") from err
+            _LOGGER.error("API error in %s: %s", func.__name__, err)
+            raise BackupAgentError(f"API error: {err}") from err
         except O2CloudTimeoutError as err:
-            _LOGGER.error("Timeout: %s", err)
-            raise BackupAgentError("Timeout during operation") from err
+            _LOGGER.error("Timeout in %s: %s", func.__name__, err)
+            raise BackupAgentError(f"Timeout during operation: {err}") from err
         except Exception as err:
-            _LOGGER.error("Unexpected error: %s", err)
+            _LOGGER.exception("Unexpected error in %s", func.__name__)
             raise BackupAgentError(f"Unexpected error: {err}") from err
 
     return wrapper
@@ -233,6 +233,12 @@ class O2CloudBackupAgent(BackupAgent):
         media_id = await self._client.upload_metadata(
             tar_name, backup.size, folder_id
         )
+        _LOGGER.debug(
+            "Upload metadata saved for backup '%s' (media_id=%s, folder_id=%s)",
+            backup.backup_id,
+            media_id,
+            folder_id,
+        )
         await self._client.upload_stream(media_id, backup.size, _progress_stream())
 
         _LOGGER.debug("Backup uploaded, saving metadata")
@@ -245,6 +251,11 @@ class O2CloudBackupAgent(BackupAgent):
 
         meta_media_id = await self._client.upload_metadata(
             metadata_name, len(meta_bytes), folder_id
+        )
+        _LOGGER.debug(
+            "Backup metadata file prepared for '%s' (media_id=%s)",
+            backup.backup_id,
+            meta_media_id,
         )
         await self._client.upload_stream(
             meta_media_id, len(meta_bytes), _meta_stream()
