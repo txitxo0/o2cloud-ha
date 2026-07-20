@@ -6,7 +6,7 @@ from typing import Final
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .client import O2CloudClient
 from .const import (
@@ -34,16 +34,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up integration from config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Create client
-    session = async_create_clientsession(hass)
-    
+    # Create client.
+    # Use the shared HA client session (NOT async_create_clientsession):
+    # sessions created per-entry are auto-closed on reload/reauth, which left
+    # the client (and the backup agent) holding a closed session
+    # ("RuntimeError: Session is closed"). Cookies are passed per-request, so
+    # the shared session is safe here.
+    session = async_get_clientsession(hass)
+
     # Parse cookies from JSON
     cookies_str = entry.data.get(CONF_COOKIES, "{}")
     try:
-        cookies = json.loads(cookies_str) if isinstance(cookies_str, str) else cookies_str
+        cookies = (
+            json.loads(cookies_str) if isinstance(cookies_str, str) else cookies_str
+        )
     except json.JSONDecodeError:
         cookies = {}
-    
+
     client = O2CloudClient(
         validation_key=entry.data[CONF_VALIDATION_KEY],
         cookies=cookies,
