@@ -344,6 +344,16 @@ class O2CloudClient:
         if media_id is None and isinstance(meta_result, dict):
             media_id = meta_result.get("id")
         if not media_id:
+            # save-metadata answers HTTP 200 even on rejection, embedding the
+            # reason as {"error": {"code", "message"}}. Surface it clearly
+            # instead of the cryptic "No media id received".
+            error = meta_data.get("error") if isinstance(meta_data, dict) else None
+            if isinstance(error, dict) and error.get("code"):
+                raise O2CloudAPIError(
+                    f"O2 rejected '{remote_name}' ({size} bytes): "
+                    f"{error.get('message', 'unknown error')} "
+                    f"[{error['code']}]"
+                )
             raise O2CloudAPIError(
                 f"No media id received in save-metadata: {meta_result}"
             )

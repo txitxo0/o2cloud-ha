@@ -23,13 +23,16 @@ from .client import (
     O2CloudClient,
     O2CloudTimeoutError,
 )
-from .const import DOMAIN
+from .const import CONF_MAX_UPLOAD_SIZE_MB, DEFAULT_MAX_UPLOAD_SIZE_MB, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 CACHE_TTL = 300
 METADATA_SUFFIX = ".metadata.json"
 BACKUP_SUFFIX = ".tar"
+# O2 rejects single files over ~4 GiB (MED-1020). Larger backups are split
+# into ``<backup_id>.tar.partNNN`` pieces and reassembled on download.
+PART_INFIX = ".tar.part"
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -38,6 +41,52 @@ def _as_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _part_name(backup_id: str, index: int) -> str:
+    """Name of the Nth split part of a backup's .tar."""
+    return f"{backup_id}{PART_INFIX}{index:03d}"
+
+
+class _StreamSplitter:
+    """Slice a single byte stream into consecutive fixed-size sub-streams.
+
+    Each ``part(n)`` call yields exactly ``n`` bytes pulled from the source
+    (or fewer if the source ends), buffering any overflow that crosses a
+    chunk boundary for the next part.
+    """
+
+    def __init__(self, source: AsyncIterator[bytes]) -> None:
+        self._source = source
+        self._leftover = b""
+        self._done = False
+
+    async def _next_chunk(self) -> bytes:
+        if self._leftover:
+            chunk = self._leftover
+            self._leftover = b""
+            return chunk
+        if self._done:
+            return b""
+        try:
+            return await self._source.__anext__()
+        except StopAsyncIteration:
+            self._done = True
+            return b""
+
+    async def part(self, size: int) -> AsyncIterator[bytes]:
+        """Yield exactly ``size`` bytes (or until the source is exhausted)."""
+        remaining = size
+        while remaining > 0:
+            chunk = await self._next_chunk()
+            if not chunk:
+                return
+            if len(chunk) > remaining:
+                self._leftover = chunk[remaining:]
+                chunk = chunk[:remaining]
+            remaining -= len(chunk)
+            yield chunk
+
 
 
 def _media_folder_id(item: dict[str, Any]) -> int:
@@ -67,6 +116,10 @@ def handle_backup_errors(
     ) -> Any:
         try:
             return await func(self, *args, **kwargs)
+        except (BackupAgentError, BackupNotFound):
+            # Already-typed backup errors (e.g. BackupNotFound) must reach the
+            # backup manager unchanged; do not mask them as "Unexpected error".
+            raise
         except O2CloudAuthError as err:
             _LOGGER.error("Authentication error in %s: %s", func.__name__, err)
             raise BackupAgentError(f"Authentication error: {err}") from err
@@ -112,6 +165,11 @@ class O2CloudBackupAgent(BackupAgent):
     def _lock(self) -> asyncio.Lock:
         """Shared single-flight lock for listing operations."""
         return self._data["_backup_lock"]
+
+    def _part_size_bytes(self) -> int:
+        """Max bytes per uploaded file; larger backups are split into parts."""
+        mb = self._data.get(CONF_MAX_UPLOAD_SIZE_MB, DEFAULT_MAX_UPLOAD_SIZE_MB)
+        return _as_int(mb, DEFAULT_MAX_UPLOAD_SIZE_MB) * 1024 * 1024
 
     async def _get_folder_id(self) -> int:
         """Resolve (and cache) the numeric id of the backups folder."""
@@ -187,6 +245,7 @@ class O2CloudBackupAgent(BackupAgent):
         folder_id = await self._get_folder_id()
         tar_name = f"{backup_id}{BACKUP_SUFFIX}"
         metadata_name = f"{backup_id}{METADATA_SUFFIX}"
+        part_prefix = f"{backup_id}{PART_INFIX}"
 
         _LOGGER.debug("Deleting backup %s from O2 Cloud", backup_id)
 
@@ -194,7 +253,9 @@ class O2CloudBackupAgent(BackupAgent):
         deleted = False
         for item in media:
             name = item.get("name") or ""
-            if name not in (tar_name, metadata_name):
+            if name not in (tar_name, metadata_name) and not name.startswith(
+                part_prefix
+            ):
                 continue
             if _media_folder_id(item) != folder_id:
                 continue
@@ -232,26 +293,65 @@ class O2CloudBackupAgent(BackupAgent):
         tar_name = f"{backup.backup_id}{BACKUP_SUFFIX}"
         metadata_name = f"{backup.backup_id}{METADATA_SUFFIX}"
 
-        # 1) Upload the .tar via streaming, reporting progress per chunk.
-        async def _progress_stream() -> AsyncIterator[bytes]:
-            bytes_uploaded = 0
-            stream = await open_stream()
-            async for chunk in stream:
+        # 1) Upload the .tar, reporting cumulative progress per chunk.
+        #    on_progress is SYNCHRONOUS (no await).
+        bytes_uploaded = 0
+
+        async def _with_progress(
+            source: AsyncIterator[bytes],
+        ) -> AsyncIterator[bytes]:
+            nonlocal bytes_uploaded
+            async for chunk in source:
                 yield chunk
                 bytes_uploaded += len(chunk)
-                # on_progress is SYNCHRONOUS (no await).
                 on_progress(bytes_uploaded=bytes_uploaded)
 
-        media_id = await self._client.upload_metadata(
-            tar_name, backup.size, folder_id
-        )
-        _LOGGER.debug(
-            "Upload metadata saved for backup '%s' (media_id=%s, folder_id=%s)",
-            backup.backup_id,
-            media_id,
-            folder_id,
-        )
-        await self._client.upload_stream(media_id, backup.size, _progress_stream())
+        part_size = self._part_size_bytes()
+        if backup.size <= part_size:
+            # Small enough for a single file.
+            media_id = await self._client.upload_metadata(
+                tar_name, backup.size, folder_id
+            )
+            _LOGGER.debug(
+                "Upload metadata saved for backup '%s' (media_id=%s, folder_id=%s)",
+                backup.backup_id,
+                media_id,
+                folder_id,
+            )
+            await self._client.upload_stream(
+                media_id, backup.size, _with_progress(await open_stream())
+            )
+        else:
+            # Over O2's per-file limit: split into fixed-size parts.
+            n_parts = -(-backup.size // part_size)  # ceil division
+            _LOGGER.info(
+                "Backup '%s' (%d bytes) exceeds part size %d; "
+                "uploading in %d parts",
+                backup.backup_id,
+                backup.size,
+                part_size,
+                n_parts,
+            )
+            splitter = _StreamSplitter(await open_stream())
+            for index in range(n_parts):
+                this_size = min(part_size, backup.size - index * part_size)
+                part_name = _part_name(backup.backup_id, index)
+                part_media_id = await self._client.upload_metadata(
+                    part_name, this_size, folder_id
+                )
+                _LOGGER.debug(
+                    "Uploading part %d/%d '%s' (%d bytes, media_id=%s)",
+                    index + 1,
+                    n_parts,
+                    part_name,
+                    this_size,
+                    part_media_id,
+                )
+                await self._client.upload_stream(
+                    part_media_id,
+                    this_size,
+                    _with_progress(splitter.part(this_size)),
+                )
 
         _LOGGER.debug("Backup uploaded, saving metadata")
 
@@ -294,6 +394,7 @@ class O2CloudBackupAgent(BackupAgent):
         await self.async_get_backup(backup_id)
         folder_id = await self._get_folder_id()
         tar_name = f"{backup_id}{BACKUP_SUFFIX}"
+        part_prefix = f"{backup_id}{PART_INFIX}"
 
         _LOGGER.info("Downloading backup '%s' from O2 Cloud", backup_id)
 
@@ -304,21 +405,33 @@ class O2CloudBackupAgent(BackupAgent):
         except (O2CloudAPIError, O2CloudTimeoutError) as err:
             raise BackupAgentError("Error downloading backup") from err
 
-        url = None
+        # A backup is stored either as a single <id>.tar or, when it exceeded
+        # the per-file limit, as ordered <id>.tar.partNNN pieces.
+        single_url = None
+        parts: list[tuple[str, str]] = []
         for item in media:
-            if (item.get("name") or "") != tar_name:
-                continue
+            name = item.get("name") or ""
             if _media_folder_id(item) != folder_id:
                 continue
             url = item.get("url")
-            break
+            if not url:
+                continue
+            if name == tar_name:
+                single_url = url
+            elif name.startswith(part_prefix):
+                parts.append((name, url))
 
-        if not url:
-            raise BackupNotFound(
-                f"Backup {backup_id} not found on O2 Cloud"
-            )
+        if single_url:
+            async for chunk in self._client.download(single_url):
+                yield chunk
+            return
 
-        async for chunk in self._client.download(url):
-            yield chunk
+        if parts:
+            for _name, url in sorted(parts):
+                async for chunk in self._client.download(url):
+                    yield chunk
+            return
+
+        raise BackupNotFound(f"Backup {backup_id} not found on O2 Cloud")
 
 
