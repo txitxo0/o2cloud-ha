@@ -128,9 +128,17 @@ class O2CloudClient:
         self,
         method: str,
         url: str,
+        *,
+        parse_in_executor: bool = False,
         **kwargs,
     ) -> Dict[str, Any]:
-        """Make HTTP request."""
+        """Make HTTP request.
+
+        When ``parse_in_executor`` is set, a JSON body is parsed in a worker
+        thread instead of on the event loop. This is important for large
+        responses (e.g. listing tens of thousands of media items): parsing
+        them inline would block the loop for seconds and starve other tasks.
+        """
         if not self.session:
             raise RuntimeError("Session not initialized")
 
@@ -171,6 +179,10 @@ class O2CloudClient:
 
                 content_type = resp.headers.get("content-type", "")
                 if "application/json" in content_type:
+                    if parse_in_executor:
+                        text = await resp.text()
+                        loop = asyncio.get_running_loop()
+                        return await loop.run_in_executor(None, json.loads, text)
                     return await resp.json()
                 else:
                     return {"data": await resp.text()}
@@ -226,7 +238,11 @@ class O2CloudClient:
             payload = {
                 "data": {"fields": ["name", "size", "etag", "folderid", "url"]}
             }
-            result = await self._make_request("POST", url, json=payload)
+            # Parse off the event loop: a full page can carry thousands of
+            # items and json parsing is CPU-bound.
+            result = await self._make_request(
+                "POST", url, json=payload, parse_in_executor=True
+            )
             data = self._unwrap_data(result)
             items = data.get("media", []) if isinstance(data, dict) else []
             all_items.extend(items)

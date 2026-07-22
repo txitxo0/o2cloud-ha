@@ -1,5 +1,6 @@
 """Backup support for O2 Cloud."""
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Callable, Coroutine
@@ -96,63 +97,74 @@ class O2CloudBackupAgent(BackupAgent):
         self._entry_id = entry_id
         self._client: O2CloudClient = data["client"]
         self._folder_name = data.get("folder_name", "homeassistant")
-        self._folder_id: int | None = None
+        # The backup manager may create a fresh agent per operation, so the
+        # cache (and its lock) live in the shared entry data dict instead of
+        # on the instance. This keeps repeated listings from re-enumerating
+        # the whole account several times a minute.
+        self._data = data
+        if "_backup_lock" not in data:
+            data["_backup_lock"] = asyncio.Lock()
 
         self.name = "O2 Cloud Backup"
         self.unique_id = entry_id
-        
-        self._cache_backups: dict[str, AgentBackup] = {}
-        self._cache_expiration = 0.0
+
+    @property
+    def _lock(self) -> asyncio.Lock:
+        """Shared single-flight lock for listing operations."""
+        return self._data["_backup_lock"]
 
     async def _get_folder_id(self) -> int:
         """Resolve (and cache) the numeric id of the backups folder."""
-        if self._folder_id is None:
-            self._folder_id = await self._client.resolve_folder_id(
-                self._folder_name
-            )
+        folder_id = self._data.get("_resolved_folder_id")
+        if folder_id is None:
+            folder_id = await self._client.resolve_folder_id(self._folder_name)
+            self._data["_resolved_folder_id"] = folder_id
             _LOGGER.debug(
                 "Backups folder '%s' resolved to id %s",
                 self._folder_name,
-                self._folder_id,
+                folder_id,
             )
-        return self._folder_id
+        return folder_id
 
 
     @handle_backup_errors
     @override
     async def async_list_backups(self, **kwargs: Any) -> list[AgentBackup]:
         """List backups on O2 Cloud."""
-        _LOGGER.debug("Listing backups on O2 Cloud")
+        # Serialize concurrent listings: the first caller populates the cache
+        # and the rest read it, instead of every poll triggering a full
+        # (paginated, multi-thousand item) enumeration of the account.
+        async with self._lock:
+            if time() <= self._data.get("_backup_cache_exp", 0.0):
+                return list(self._data.get("_backup_cache", {}).values())
 
-        if time() <= self._cache_expiration:
-            return list(self._cache_backups.values())
+            _LOGGER.debug("Listing backups on O2 Cloud")
+            folder_id = await self._get_folder_id()
+            media = await self._client.get_all_media()
 
-        folder_id = await self._get_folder_id()
-        media = await self._client.get_all_media()
+            backups: dict[str, AgentBackup] = {}
+            for item in media:
+                name = item.get("name") or ""
+                if not name.endswith(METADATA_SUFFIX):
+                    continue
+                if _media_folder_id(item) != folder_id:
+                    continue
+                url = item.get("url")
+                if not url:
+                    continue
+                try:
+                    raw = await self._client.download_bytes(url)
+                    backup = AgentBackup.from_dict(json.loads(raw))
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "Could not read backup metadata '%s': %s", name, err
+                    )
+                    continue
+                backups[backup.backup_id] = backup
 
-        backups: dict[str, AgentBackup] = {}
-        for item in media:
-            name = item.get("name") or ""
-            if not name.endswith(METADATA_SUFFIX):
-                continue
-            if _media_folder_id(item) != folder_id:
-                continue
-            url = item.get("url")
-            if not url:
-                continue
-            try:
-                raw = await self._client.download_bytes(url)
-                backup = AgentBackup.from_dict(json.loads(raw))
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.warning(
-                    "Could not read backup metadata '%s': %s", name, err
-                )
-                continue
-            backups[backup.backup_id] = backup
-
-        self._cache_backups = backups
-        self._cache_expiration = time() + CACHE_TTL
-        return list(backups.values())
+            self._data["_backup_cache"] = backups
+            self._data["_backup_cache_exp"] = time() + CACHE_TTL
+            return list(backups.values())
 
     @handle_backup_errors
     @override
@@ -193,8 +205,8 @@ class O2CloudBackupAgent(BackupAgent):
                 _LOGGER.warning("Error deleting %s: %s", name, err)
 
         # Invalidate cache
-        self._cache_backups.pop(backup_id, None)
-        self._cache_expiration = 0.0
+        self._data.get("_backup_cache", {}).pop(backup_id, None)
+        self._data["_backup_cache_exp"] = 0.0
 
         if deleted:
             _LOGGER.info("Backup %s deleted from O2 Cloud", backup_id)
@@ -270,8 +282,9 @@ class O2CloudBackupAgent(BackupAgent):
         # Register the backup in cache so that subsequent checks
         # (async_get_backup / async_list_backups) find it despite the
         # consistency latency of the remote listing.
-        self._cache_backups[backup.backup_id] = backup
-        self._cache_expiration = time() + CACHE_TTL
+        cache = self._data.setdefault("_backup_cache", {})
+        cache[backup.backup_id] = backup
+        self._data["_backup_cache_exp"] = time() + CACHE_TTL
 
     @override
     async def async_download_backup(
