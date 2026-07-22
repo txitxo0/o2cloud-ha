@@ -23,6 +23,8 @@ Requires: pip install playwright  (and: python -m playwright install chromium)
 
 import asyncio
 import json
+import socket
+import ssl
 import sys
 from urllib.parse import parse_qs, urlparse
 
@@ -36,6 +38,25 @@ except ImportError:
 
 
 SAPI_MARKER = "cloud.o2online.es/sapi/"
+
+
+def _build_connector() -> aiohttp.TCPConnector:
+    """Build the aiohttp connector used to replay the request.
+
+    - Force IPv4: the host also resolves to IPv6, but many machines have no
+      working IPv6 route and aiohttp's happy-eyeballs surfaces a confusing
+      "connection refused" instead of falling back.
+    - Verify TLS against the OS trust store (via ``truststore`` when available)
+      so corporate MITM proxies / custom root CAs are trusted, exactly like the
+      browser does. Falls back to the default certifi bundle otherwise.
+    """
+    try:
+        import truststore
+
+        ssl_ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        ssl_ctx = ssl.create_default_context()
+    return aiohttp.TCPConnector(family=socket.AF_INET, ssl=ssl_ctx)
 
 
 def _parse_cookie_header(cookie_header: str) -> dict:
@@ -100,8 +121,12 @@ async def _replay_request(url: str, headers: dict) -> tuple[bool, int, str]:
     """Replay an exact request from aiohttp (with the real cookie)."""
     send_headers = _sanitize_headers(headers)
     timeout = aiohttp.ClientTimeout(total=25)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, headers=send_headers, allow_redirects=False) as resp:
+    async with aiohttp.ClientSession(
+        timeout=timeout, connector=_build_connector()
+    ) as session:
+        async with session.get(
+            url, headers=send_headers, allow_redirects=False
+        ) as resp:
             body = await resp.text()
             ok = resp.status < 400 and not ('"error"' in body and "SEC-" in body)
             return ok, resp.status, body
@@ -135,7 +160,9 @@ async def extract_credentials():
         except Exception as e:  # noqa: BLE001
             print(f"[WARN] Error during initial navigation: {e}")
 
-        print("[INFO] Waiting for login and capture of an authenticated /sapi request...")
+        print(
+            "[INFO] Waiting for login and capture of an authenticated /sapi request..."
+        )
 
         # Wait up to 5 min for at least one SAPI request with validationkey to appear.
         for _ in range(150):
@@ -151,7 +178,9 @@ async def extract_credentials():
 
         # Force some extra traffic in case it did not navigate to media yet.
         try:
-            await page.goto("https://cloud.o2online.es/#/files", wait_until="domcontentloaded")
+            await page.goto(
+                "https://cloud.o2online.es/#/files", wait_until="domcontentloaded"
+            )
             await page.wait_for_timeout(4000)
         except Exception:  # noqa: BLE001
             pass
@@ -176,7 +205,9 @@ async def extract_credentials():
             parsed = urlparse(url)
             key = (parse_qs(parsed.query).get("validationkey") or [""])[0]
 
-            print(f"[DEBUG] status={status} cookies={cookie_count} key={key[:16]}... path={parsed.path}")
+            print(
+                f"[DEBUG] status={status} cookies={cookie_count} key={key[:16]}... path={parsed.path}"
+            )
 
             if not cookie_header:
                 continue
@@ -204,7 +235,9 @@ async def extract_credentials():
             print("=" * 70)
             print("The browser authenticates, but when replaying the SAME request with")
             print("the same cookies from Python, the server rejects it. This indicates")
-            print("additional verification (TLS/device fingerprint) not replicable with aiohttp.")
+            print(
+                "additional verification (TLS/device fingerprint) not replicable with aiohttp."
+            )
             await browser.close()
             return None
 
