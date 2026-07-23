@@ -38,4 +38,4 @@ ATTR_MAX_DAYS = "max_days"
 # Note: the O2 session expires from inactivity (~30-45 min). Each refresh
 # makes a real request to /sapi, so it acts as a keepalive. It is kept
 # well below the timeout to avoid letting the session expire.
-COORDINATOR_UPDATE_INTERVAL = 10  # minutes
+COORDINATOR_UPDATE_INTERVAL = 5  # minutes
