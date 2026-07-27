@@ -1,0 +1,26 @@
+upload_backup:
+  name: Upload backup
+  description: Upload a file to O2 Cloud.
+  fields:
+    file_path:
+      name: File path
+      description: Absolute path of the file to upload.
+      required: true
+      example: /config/backups/backup.tar
+      selector:
+        text:
+    remote_name:
+      name: Remote name
+      description: Optional name to store the file as on O2 Cloud.
+      required: false
+      example: backup.tar
+      selector:
+        text:
+
+refresh_quota:
+  name: Refresh quota
+  description: Refresh the O2 Cloud storage quota data.
+
+test_connection:
+  name: Test connection
+  description: Test the connection to O2 Cloud.

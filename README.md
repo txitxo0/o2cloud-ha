@@ -1,14 +1,32 @@
-# O2 Cloud Backup para Home Assistant
+<div align="center">
 
-**🇪🇸 Español** · [🇬🇧 English](#o2-cloud-backup-for-home-assistant-english)
+# ☁️ O2 Cloud Backup para Home Assistant
 
-Usa tu **O2 Cloud** (el almacenamiento en la nube de O2 / Telefónica) como
-destino para las **copias de seguridad** de Home Assistant. 📦☁️
+### Tus copias de seguridad de Home Assistant, a salvo en tu nube de O2. Sin discos que se llenan, sin sustos. 🛟
 
-- 📤 O2 Cloud aparece como una ubicación de backup nativa de Home Assistant
+**🇪🇸 Español** · [🇬🇧 English](#-o2-cloud-backup-for-home-assistant-english)
+
+[![Validate](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?logo=homeassistantcommunitystore&logoColor=white)](https://hacs.xyz)
+[![Versión](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftxitxo0%2Fo2cloud-ha%2Fmain%2Fcustom_components%2Fo2cloud%2Fmanifest.json&query=%24.version&label=versi%C3%B3n&logo=homeassistant&color=41BDF5)](https://github.com/txitxo0/o2cloud-ha/releases)
+[![Estrellas](https://img.shields.io/github/stars/txitxo0/o2cloud-ha?style=flat&logo=github&color=gold)](https://github.com/txitxo0/o2cloud-ha/stargazers)
+
+</div>
+
+---
+
+¿Se te llena el disco de Home Assistant con cada backup? 😅 Deja de sufrir: usa
+tu **O2 Cloud** (el almacenamiento en la nube de O2 / Telefónica) como destino
+para tus **copias de seguridad**. Las creas desde Home Assistant como siempre y
+vuelan directas a la nube. 📦☁️
+
+**Lo que consigues:**
+
+- 📤 O2 Cloud aparece como una ubicación de backup **nativa** de Home Assistant
   (crear, subir, listar, descargar y borrar copias).
-- 📊 Sensores de cuota (total, usado, libre, %).
+- 📊 Sensores de cuota (total, usado, libre, %) para vigilar tu espacio de un vistazo.
 - 🇪🇸 Interfaz en español e inglés.
+- 🔒 Tus credenciales nunca salen de tu Home Assistant.
 
 ---
 
@@ -117,17 +135,35 @@ MIT
 ---
 ---
 
-# O2 Cloud Backup for Home Assistant (English)
+<div align="center">
 
-[🇪🇸 Español](#o2-cloud-backup-para-home-assistant) · **🇬🇧 English**
+# ☁️ O2 Cloud Backup for Home Assistant (English)
 
-Use your **O2 Cloud** (the O2 / Telefónica personal cloud storage) as a
-destination for your Home Assistant **backups**. 📦☁️
+### Your Home Assistant backups, safe in your O2 cloud. No more full disks, no more scares. 🛟
 
-- 📤 O2 Cloud shows up as a native Home Assistant backup location
+[🇪🇸 Español](#-o2-cloud-backup-para-home-assistant) · **🇬🇧 English**
+
+[![Validate](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?logo=homeassistantcommunitystore&logoColor=white)](https://hacs.xyz)
+[![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftxitxo0%2Fo2cloud-ha%2Fmain%2Fcustom_components%2Fo2cloud%2Fmanifest.json&query=%24.version&label=version&logo=homeassistant&color=41BDF5)](https://github.com/txitxo0/o2cloud-ha/releases)
+[![Stars](https://img.shields.io/github/stars/txitxo0/o2cloud-ha?style=flat&logo=github&color=gold)](https://github.com/txitxo0/o2cloud-ha/stargazers)
+
+</div>
+
+---
+
+Tired of your Home Assistant disk filling up with every backup? 😅 Stop the pain:
+use your **O2 Cloud** (the O2 / Telefónica personal cloud storage) as a
+destination for your **backups**. Create them from Home Assistant as usual and
+they fly straight to the cloud. 📦☁️
+
+**What you get:**
+
+- 📤 O2 Cloud shows up as a **native** Home Assistant backup location
   (create, upload, list, download and delete backups).
-- 📊 Quota sensors (total, used, free, %).
+- 📊 Quota sensors (total, used, free, %) to keep an eye on your space at a glance.
 - 🇪🇸 Spanish and English interface.
+- 🔒 Your credentials never leave your Home Assistant.
 
 > ℹ️ O2 Cloud is a Spanish service (O2 / Telefónica España), but this guide is
 > provided in English so anyone can set it up.
