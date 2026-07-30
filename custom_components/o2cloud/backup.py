@@ -148,13 +148,8 @@ class O2CloudBackupAgent(BackupAgent):
         super().__init__()
         self._hass = hass
         self._entry_id = entry_id
-        self._client: O2CloudClient = data["client"]
-        self._folder_name = data.get("folder_name", "homeassistant")
-        # The backup manager may create a fresh agent per operation, so the
-        # cache (and its lock) live in the shared entry data dict instead of
-        # on the instance. This keeps repeated listings from re-enumerating
-        # the whole account several times a minute.
-        self._data = data
+        # Seed the lock in the initial data dict; it migrates to the current
+        # dict automatically via _lock after any config-entry reload.
         if "_backup_lock" not in data:
             data["_backup_lock"] = asyncio.Lock()
 
@@ -162,21 +157,44 @@ class O2CloudBackupAgent(BackupAgent):
         self.unique_id = entry_id
 
     @property
+    def _current_data(self) -> dict[str, Any]:
+        """Always return the live entry data dict.
+
+        HA's backup manager caches BackupAgent instances across operations.
+        After a re-auth / config-entry reload async_setup_entry replaces the
+        dict entirely, so we must look it up fresh each time instead of
+        caching a reference at __init__ time.
+        """
+        return self._hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+
+    @property
+    def _client(self) -> O2CloudClient:
+        return self._current_data["client"]
+
+    @property
+    def _folder_name(self) -> str:
+        return self._current_data.get("folder_name", "homeassistant")
+
+    @property
     def _lock(self) -> asyncio.Lock:
-        """Shared single-flight lock for listing operations."""
-        return self._data["_backup_lock"]
+        """Shared single-flight lock; created on demand after a reload."""
+        data = self._current_data
+        if "_backup_lock" not in data:
+            data["_backup_lock"] = asyncio.Lock()
+        return data["_backup_lock"]
 
     def _part_size_bytes(self) -> int:
         """Max bytes per uploaded file; larger backups are split into parts."""
-        mb = self._data.get(CONF_MAX_UPLOAD_SIZE_MB, DEFAULT_MAX_UPLOAD_SIZE_MB)
+        mb = self._current_data.get(CONF_MAX_UPLOAD_SIZE_MB, DEFAULT_MAX_UPLOAD_SIZE_MB)
         return _as_int(mb, DEFAULT_MAX_UPLOAD_SIZE_MB) * 1024 * 1024
 
     async def _get_folder_id(self) -> int:
         """Resolve (and cache) the numeric id of the backups folder."""
-        folder_id = self._data.get("_resolved_folder_id")
+        data = self._current_data
+        folder_id = data.get("_resolved_folder_id")
         if folder_id is None:
             folder_id = await self._client.resolve_folder_id(self._folder_name)
-            self._data["_resolved_folder_id"] = folder_id
+            data["_resolved_folder_id"] = folder_id
             _LOGGER.debug(
                 "Backups folder '%s' resolved to id %s",
                 self._folder_name,
@@ -193,8 +211,9 @@ class O2CloudBackupAgent(BackupAgent):
         # and the rest read it, instead of every poll triggering a full
         # (paginated, multi-thousand item) enumeration of the account.
         async with self._lock:
-            if time() <= self._data.get("_backup_cache_exp", 0.0):
-                return list(self._data.get("_backup_cache", {}).values())
+            data = self._current_data
+            if time() <= data.get("_backup_cache_exp", 0.0):
+                return list(data.get("_backup_cache", {}).values())
 
             _LOGGER.debug("Listing backups on O2 Cloud")
             folder_id = await self._get_folder_id()
@@ -220,8 +239,8 @@ class O2CloudBackupAgent(BackupAgent):
                     continue
                 backups[backup.backup_id] = backup
 
-            self._data["_backup_cache"] = backups
-            self._data["_backup_cache_exp"] = time() + CACHE_TTL
+            data["_backup_cache"] = backups
+            data["_backup_cache_exp"] = time() + CACHE_TTL
             return list(backups.values())
 
     @handle_backup_errors
@@ -266,8 +285,9 @@ class O2CloudBackupAgent(BackupAgent):
                 _LOGGER.warning("Error deleting %s: %s", name, err)
 
         # Invalidate cache
-        self._data.get("_backup_cache", {}).pop(backup_id, None)
-        self._data["_backup_cache_exp"] = 0.0
+        data = self._current_data
+        data.get("_backup_cache", {}).pop(backup_id, None)
+        data["_backup_cache_exp"] = 0.0
 
         if deleted:
             _LOGGER.info("Backup %s deleted from O2 Cloud", backup_id)
@@ -382,9 +402,10 @@ class O2CloudBackupAgent(BackupAgent):
         # Register the backup in cache so that subsequent checks
         # (async_get_backup / async_list_backups) find it despite the
         # consistency latency of the remote listing.
-        cache = self._data.setdefault("_backup_cache", {})
+        _data = self._current_data
+        cache = _data.setdefault("_backup_cache", {})
         cache[backup.backup_id] = backup
-        self._data["_backup_cache_exp"] = time() + CACHE_TTL
+        _data["_backup_cache_exp"] = time() + CACHE_TTL
 
     @override
     async def async_download_backup(
