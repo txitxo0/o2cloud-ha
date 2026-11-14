@@ -12,8 +12,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .client import O2CloudClient
 from .const import (
     CONF_COOKIES,
+    CONF_DEVICE_ID,
     CONF_FOLDER_ID,
     CONF_FOLDER_NAME,
+    CONF_OAUTH_TOKENS,
     CONF_USER_AGENT,
     CONF_VALIDATION_KEY,
     DOMAIN,
@@ -54,11 +56,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except json.JSONDecodeError:
         cookies = {}
 
+    def update_tokens(tokens):
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_OAUTH_TOKENS: tokens}
+        )
+
     client = O2CloudClient(
-        validation_key=entry.data[CONF_VALIDATION_KEY],
+        validation_key=entry.data.get(CONF_VALIDATION_KEY, ""),
         cookies=cookies,
         user_agent=entry.data[CONF_USER_AGENT],
         session=session,
+        oauth_tokens=entry.data.get(CONF_OAUTH_TOKENS),
+        token_update=update_tokens,
+        device_id=entry.data.get(CONF_DEVICE_ID, ""),
     )
 
     # Create coordinator
@@ -75,8 +85,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Listener to reload when options change
-    entry.async_on_unload(entry.add_update_listener(async_update_listener))
+    options = dict(entry.options)
+
+    async def options_updated(hass, updated_entry):
+        nonlocal options
+        if options != updated_entry.options:
+            options = dict(updated_entry.options)
+            await hass.config_entries.async_reload(updated_entry.entry_id)
+
+    entry.async_on_unload(entry.add_update_listener(options_updated))
 
     return True
 
@@ -88,8 +105,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await data["client"].close()
 
     return unload_ok
-
-
-async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Listen for changes in options."""
-    await hass.config_entries.async_reload(entry.entry_id)

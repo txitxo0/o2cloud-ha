@@ -3,22 +3,23 @@
     "step": {
       "user": {
         "title": "Configure O2 Cloud Backup",
-        "description": "Run this command on a computer with Python:\n\n`python extract_o2_credentials.py`\n\nLog in to O2 in the browser that opens, then copy the JSON it prints in the terminal and paste it below.",
+        "description": "Choose the folder for your backups.",
         "data": {
-          "credentials_json": "Credentials JSON (paste o2_credentials.json content)",
           "folder_name": "Backup folder name"
         }
       },
-      "reauth": {
-        "title": "Re-authenticate O2 Cloud",
-        "description": "Your session has expired. Run extract_o2_credentials.py again and paste the new o2_credentials.json below.",
+      "authorize": {
+        "title": "Sign in to O2 Cloud",
+        "description": "[Open the O2 login page]({auth_url}) and sign in. Copy the complete URL from the address bar after signing in and paste it below. Keep the URL private.",
         "data": {
-          "credentials_json": "Credentials JSON (paste o2_credentials.json content)"
+          "callback_url": "URL after signing in"
         }
       }
     },
     "error": {
       "invalid_credentials": "Invalid credentials or failed connection",
+      "invalid_callback": "Invalid URL or login session. Paste the complete URL from this login attempt.",
+      "cannot_connect": "Could not connect to O2 Cloud. Please try again.",
       "missing_fields": "Paste a valid o2_credentials.json (must contain validation_key and user_agent)",
       "unknown": "Unexpected error"
     }

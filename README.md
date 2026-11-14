@@ -33,11 +33,9 @@ vuelan directas a la nube. 📦☁️
 ## 🔒 Sobre tu privacidad
 
 > Esta integración **no recopila ni envía tus datos a ningún sitio**. Las
-> credenciales que introduces (`validation_key` + cookies de sesión) se usan
-> **exclusivamente** para autenticarte contra tu propia nube de O2
-> (`cloud.o2online.es`) y se guardan en el almacenamiento cifrado de Home
-> Assistant. No son contraseñas: son una sesión de tu navegador, y solo sirven
-> para hablar con la API de O2 en tu nombre.
+> credenciales de sesión se usan **exclusivamente** para autenticarte contra tu
+> propia nube de O2 y se guardan en la configuración de Home Assistant. Protege
+> tus copias de seguridad y no compartas los tokens ni la URL de retorno.
 
 ---
 
@@ -61,37 +59,12 @@ vuelan directas a la nube. 📦☁️
    ```
 2. Reinicia Home Assistant.
 
-## 2. Obtener el JSON de credenciales
-
-O2 no tiene una API pública con usuario y contraseña, así que hay que iniciar
-sesión **una vez** en un navegador y extraer la sesión. Lo hace un pequeño
-script por ti.
-
-> ⚠️ **Ejecuta el script en tu ordenador** (Windows, macOS o Linux con
-> pantalla), **NO** dentro de Home Assistant. El add-on de SSH/Terminal es un
-> servidor **sin escritorio**: no puede abrir el navegador ni mostrarte el
-> login con SMS, así que el script no funciona ahí. Solo necesitas el ordenador
-> para este paso; luego pegas el JSON en Home Assistant.
-
-1. En tu ordenador, con **Python** instalado, ejecuta:
-   ```bash
-   pip install playwright
-   python -m playwright install chromium
-   python extract_o2_credentials.py
-   ```
-2. Se abrirá un navegador. **Inicia sesión en O2** (teléfono + contraseña + SMS).
-3. Cuando entres a tus archivos, el script **imprime en la terminal un bloque
-   JSON**. Cópialo entero y pégalo en la integración.
-
-> 💡 El JSON solo contiene lo necesario para autenticar la sesión. Puedes
-> revisarlo antes de pegarlo.
-
-## 3. Añadir la integración
+## 2. Añadir la integración
 
 1. **Ajustes → Dispositivos y servicios → Añadir integración → "O2 Cloud"**.
-2. **Pega el JSON** en el único campo del formulario.
-3. (Opcional) Cambia el nombre de la carpeta de backups (por defecto:
-   `homeassistant`).
+2. Elige el nombre de la carpeta de backups (por defecto: `homeassistant`).
+3. Abre el enlace de acceso e inicia sesión en O2. Copia la URL completa de la
+  barra de direcciones después de iniciar sesión y pégala en Home Assistant.
 4. ¡Listo! Ya puedes usar O2 Cloud en **Ajustes → Sistema → Copias de
    seguridad**.
 
@@ -99,14 +72,15 @@ script por ti.
 
 ## ⏳ ¿La sesión caduca?
 
-La sesión de O2 caduca por inactividad (días/semanas). Cuando ocurra, Home
-Assistant te pedirá **reautenticar**: vuelve a ejecutar
-`python extract_o2_credentials.py` **en tu ordenador** y pega el nuevo JSON.
+La integración intenta renovar la sesión automáticamente. Si O2 revoca las
+credenciales, Home Assistant te pedirá repetir el acceso desde el navegador.
+Las instalaciones existentes con cookies siguen funcionando y pasan al nuevo
+método al reautenticarse.
 
 ## ❓ Problemas frecuentes
 
-- **"Invalid credentials"**: el JSON está incompleto o la sesión caducó. Vuelve
-  a ejecutar el script y pega el nuevo JSON.
+- **"Invalid credentials"**: vuelve a abrir el enlace de acceso e iniciar sesión.
+- **URL no válida**: copia la dirección completa del mismo intento de acceso.
 - **Los sensores aparecen "unavailable"**: revisa los logs
   (Ajustes → Sistema → Registros) y comprueba la sesión.
 
@@ -127,6 +101,8 @@ posible sin estos proyectos de referencia. ¡Gracias a sus autores! 🙌
   — CLI de O2 Cloud (flujo de subida en dos pasos y autenticación).
 - [garanda21/o2cloud_gateway_webdav](https://github.com/garanda21/o2cloud_gateway_webdav)
   — gateway WebDAV para O2 Cloud (login por navegador y manejo de sesión).
+- [uniextra/MovistarWebDAVProxy](https://github.com/uniextra/MovistarWebDAVProxy)
+  — referencia para la vinculación OAuth del cliente de escritorio.
 
 ## Licencia
 
@@ -173,11 +149,9 @@ they fly straight to the cloud. 📦☁️
 ## 🔒 About your privacy
 
 > This integration **does not collect or send your data anywhere**. The
-> credentials you enter (`validation_key` + session cookies) are used
-> **only** to authenticate against your own O2 cloud (`cloud.o2online.es`) and
-> are stored in Home Assistant's encrypted storage. They are not passwords:
-> they are a session from your browser, used solely to talk to the O2 API on
-> your behalf.
+> session credentials are used **only** to authenticate against your own O2
+> cloud and are stored in Home Assistant's configuration. Protect your backups
+> and do not share the tokens or the callback URL.
 
 ---
 
@@ -200,50 +174,26 @@ they fly straight to the cloud. 📦☁️
    ```
 2. Restart Home Assistant.
 
-## 2. Get the credentials JSON
-
-O2 has no public username/password API, so you must log in **once** in a
-browser and extract the session. A small script does it for you.
-
-> ⚠️ **Run the script on your own computer** (Windows, macOS or Linux with a
-> screen), **NOT** inside Home Assistant. The SSH/Terminal add-on is a
-> **headless server**: it can't open the browser or show you the SMS login, so
-> the script won't work there. You only need the computer for this step; then
-> you paste the JSON into Home Assistant.
-
-1. On your computer, with **Python** installed, run:
-   ```bash
-   pip install playwright
-   python -m playwright install chromium
-   python extract_o2_credentials.py
-   ```
-2. A browser opens. **Log in to O2** (phone number + password + SMS).
-3. Once you reach your files, the script **prints a JSON block in the
-   terminal**. Copy the whole block and paste it into the integration.
-
-> 💡 The JSON only contains what's needed to authenticate the session. You can
-> review it before pasting.
-
-## 3. Add the integration
+## 2. Add the integration
 
 1. **Settings → Devices & services → Add integration → "O2 Cloud"**.
-2. **Paste the JSON** into the single form field.
-3. (Optional) Change the backup folder name (default: `homeassistant`).
+2. Choose the backup folder name (default: `homeassistant`).
+3. Open the sign-in link and log in to O2. Copy the complete URL from the
+  address bar after signing in and paste it into Home Assistant.
 4. Done! You can now use O2 Cloud under **Settings → System → Backups**.
 
 ---
 
 ## ⏳ Does the session expire?
 
-The O2 session expires after inactivity (days/weeks). When it does, Home
-Assistant will ask you to **re-authenticate**: run
-`python extract_o2_credentials.py` **on your computer** again and paste the new
-JSON.
+The integration attempts to renew the session automatically. If O2 revokes the
+credentials, Home Assistant will ask you to sign in again. Existing cookie-based
+installations continue to work and switch to OAuth when re-authenticated.
 
 ## ❓ Troubleshooting
 
-- **"Invalid credentials"**: the JSON is incomplete or the session expired. Run
-  the script again and paste the new JSON.
+- **"Invalid credentials"**: open the sign-in link again and sign in.
+- **Invalid URL**: copy the complete address from the same sign-in attempt.
 - **Sensors show "unavailable"**: check the logs
   (Settings → System → Logs) and verify the session.
 
@@ -264,6 +214,8 @@ possible without these reference projects. Thanks to their authors! 🙌
   — O2 Cloud CLI (two-step upload flow and authentication).
 - [garanda21/o2cloud_gateway_webdav](https://github.com/garanda21/o2cloud_gateway_webdav)
   — WebDAV gateway for O2 Cloud (browser-based login and session handling).
+- [uniextra/MovistarWebDAVProxy](https://github.com/uniextra/MovistarWebDAVProxy)
+  — reference for desktop-client OAuth pairing.
 
 ## License
 

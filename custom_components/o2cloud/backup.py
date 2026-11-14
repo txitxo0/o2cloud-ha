@@ -88,7 +88,6 @@ class _StreamSplitter:
             yield chunk
 
 
-
 def _media_folder_id(item: dict[str, Any]) -> int:
     """Get the folder id of a media item (folderid or folder field)."""
     return _as_int(item.get("folderid", item.get("folder")))
@@ -111,9 +110,7 @@ def handle_backup_errors(
     """Decorator to handle backup errors."""
 
     @wraps(func)
-    async def wrapper(
-        self: "O2CloudBackupAgent", *args, **kwargs
-    ) -> Any:
+    async def wrapper(self: "O2CloudBackupAgent", *args, **kwargs) -> Any:
         try:
             return await func(self, *args, **kwargs)
         except (BackupAgentError, BackupNotFound):
@@ -169,7 +166,10 @@ class O2CloudBackupAgent(BackupAgent):
 
     @property
     def _client(self) -> O2CloudClient:
-        return self._current_data["client"]
+        client = self._current_data.get("client")
+        if client is None:
+            raise BackupAgentError("O2 Cloud integration is not available")
+        return client
 
     @property
     def _folder_name(self) -> str:
@@ -201,7 +201,6 @@ class O2CloudBackupAgent(BackupAgent):
                 folder_id,
             )
         return folder_id
-
 
     @handle_backup_errors
     @override
@@ -245,9 +244,7 @@ class O2CloudBackupAgent(BackupAgent):
 
     @handle_backup_errors
     @override
-    async def async_get_backup(
-        self, backup_id: str, **kwargs: Any
-    ) -> AgentBackup:
+    async def async_get_backup(self, backup_id: str, **kwargs: Any) -> AgentBackup:
         """Get information about a specific backup."""
         backups = await self.async_list_backups()
         for backup in backups:
@@ -257,9 +254,7 @@ class O2CloudBackupAgent(BackupAgent):
 
     @handle_backup_errors
     @override
-    async def async_delete_backup(
-        self, backup_id: str, **kwargs: Any
-    ) -> None:
+    async def async_delete_backup(self, backup_id: str, **kwargs: Any) -> None:
         """Delete a backup (.tar file and its metadata)."""
         folder_id = await self._get_folder_id()
         tar_name = f"{backup_id}{BACKUP_SUFFIX}"
@@ -345,8 +340,7 @@ class O2CloudBackupAgent(BackupAgent):
             # Over O2's per-file limit: split into fixed-size parts.
             n_parts = -(-backup.size // part_size)  # ceil division
             _LOGGER.info(
-                "Backup '%s' (%d bytes) exceeds part size %d; "
-                "uploading in %d parts",
+                "Backup '%s' (%d bytes) exceeds part size %d; uploading in %d parts",
                 backup.backup_id,
                 backup.size,
                 part_size,
@@ -389,9 +383,7 @@ class O2CloudBackupAgent(BackupAgent):
             backup.backup_id,
             meta_media_id,
         )
-        await self._client.upload_stream(
-            meta_media_id, len(meta_bytes), _meta_stream()
-        )
+        await self._client.upload_stream(meta_media_id, len(meta_bytes), _meta_stream())
 
         _LOGGER.info(
             "Backup '%s' uploaded successfully to O2 Cloud (%d bytes)",
@@ -454,5 +446,3 @@ class O2CloudBackupAgent(BackupAgent):
             return
 
         raise BackupNotFound(f"Backup {backup_id} not found on O2 Cloud")
-
-

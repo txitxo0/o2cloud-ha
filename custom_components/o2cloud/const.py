@@ -2,6 +2,8 @@
 
 DOMAIN = "o2cloud"
 CONF_VALIDATION_KEY = "validation_key"
+CONF_OAUTH_TOKENS = "oauth_tokens"
+CONF_DEVICE_ID = "device_id"
 CONF_COOKIES = "cookies"
 CONF_USER_AGENT = "user_agent"
 CONF_FOLDER_NAME = "folder_name"

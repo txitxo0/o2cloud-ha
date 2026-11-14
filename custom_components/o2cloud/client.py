@@ -4,9 +4,10 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
-from urllib.parse import urlencode
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -16,6 +17,7 @@ from .const import (
     UPLOAD_BASE_URL,
     UPLOAD_TIMEOUT,
 )
+from .oauth import OAuthError, authorization_header, exchange_tokens, rotated_tokens
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,12 +27,12 @@ MEDIA_PAGE_SIZE = 1000
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
-def _compact_iso(timestamp: Optional[float] = None) -> str:
+def _compact_iso(timestamp: float | None = None) -> str:
     """Date in compact ISO format (YYYYMMDDThhmmss) expected by the API."""
     dt = (
-        datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        datetime.fromtimestamp(timestamp, tz=UTC)
         if timestamp is not None
-        else datetime.now(timezone.utc)
+        else datetime.now(UTC)
     )
     return dt.strftime("%Y%m%dT%H%M%S")
 
@@ -52,16 +54,18 @@ def _as_int(value: Any, default: int = 0) -> int:
         return default
 
 
-
 class O2CloudClient:
     """Client to interact with the O2 Cloud API."""
 
     def __init__(
         self,
         validation_key: str,
-        cookies: Dict[str, str],
+        cookies: dict[str, str],
         user_agent: str,
-        session: Optional[aiohttp.ClientSession] = None,
+        session: aiohttp.ClientSession | None = None,
+        oauth_tokens: dict | None = None,
+        token_update=None,
+        device_id: str = "",
     ):
         """Initialize client."""
         self.validation_key = validation_key
@@ -69,13 +73,12 @@ class O2CloudClient:
         self.user_agent = user_agent
         self.session = session
         self._own_session = session is None
-        
-        # Log for debugging
-        _LOGGER.debug(
-            "O2CloudClient initialized with %d cookies, validation_key: %s...",
-            len(self.cookies),
-            validation_key[:10] if validation_key else "None"
-        )
+        self.oauth_tokens = oauth_tokens
+        self.token_update = token_update
+        self.device_id = device_id
+        self._oauth_lock = asyncio.Lock()
+
+        _LOGGER.debug("O2CloudClient initialized with %d cookies", len(self.cookies))
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -93,24 +96,122 @@ class O2CloudClient:
         if self._own_session and self.session:
             await self.session.close()
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get standard headers.
 
         Note: kept minimal on purpose. Forwarding Accept-Encoding with
         br/zstd or HTTP/2 pseudo-headers causes 400 responses from the backend.
         """
-        return {
+        headers = {
             "User-Agent": self.user_agent,
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://cloud.o2online.es/",
             "X-Requested-With": "XMLHttpRequest",
         }
+        if self.oauth_tokens:
+            headers["Authorization"] = authorization_header(self.oauth_tokens)
+            headers["X-deviceid"] = self.device_id
+            headers["X-devicename"] = "PC Windows"
+        return headers
+
+    def _update_tokens(self, tokens):
+        if tokens != self.oauth_tokens:
+            self.oauth_tokens = tokens
+            if self.token_update:
+                self.token_update(tokens)
 
     def _build_query_params(self, **kwargs) -> str:
         """Build query parameters with validationkey."""
-        params = {**kwargs, "validationkey": self.validation_key}
+        params = dict(kwargs)
+        if self.validation_key:
+            params["validationkey"] = self.validation_key
         return urlencode(params)
+
+    def _session_url(self, url: str) -> str:
+        parts = urlsplit(url)
+        if not self.validation_key or parts.hostname not in (
+            "cloud.o2online.es",
+            "upload.cloud.o2online.es",
+        ):
+            return url
+        params = [
+            (name, value)
+            for name, value in parse_qsl(parts.query, keep_blank_values=True)
+            if name != "validationkey"
+        ]
+        params.append(("validationkey", self.validation_key))
+        return urlunsplit(parts._replace(query=urlencode(params)))
+
+    async def _login_sapi(self) -> None:
+        """Establish a SAPI session from the current OAuth tokens."""
+        if not self.session:
+            raise RuntimeError("Session not initialized")
+        async with self.session.request(
+            "GET",
+            f"{API_BASE_URL}login/oauth?action=login&responsetime=true",
+            headers=self._get_headers(),
+            cookies=self.cookies,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as response:
+            self._update_tokens(
+                rotated_tokens(
+                    response.headers.get("Authorization", ""), self.oauth_tokens
+                )
+            )
+            if response.status in (401, 403):
+                raise O2CloudAuthError(response.status)
+            if response.status != 200:
+                raise O2CloudAPIError(
+                    f"SAPI OAuth login failed: HTTP {response.status}"
+                )
+            try:
+                result = await response.json(content_type=None)
+            except (ValueError, aiohttp.ClientError) as err:
+                raise O2CloudAPIError("SAPI OAuth login returned invalid JSON") from err
+            if not isinstance(result, dict) or result.get("error"):
+                raise O2CloudAPIError("SAPI OAuth login rejected the session")
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            cookies = {
+                name: morsel.value
+                for name, morsel in response.cookies.items()
+                if name.lower() in ("jsessionid", "validationkey") and morsel.value
+            }
+            validation_key = (
+                next(
+                    (
+                        value
+                        for name, value in cookies.items()
+                        if name.lower() == "validationkey"
+                    ),
+                    "",
+                )
+                or data.get("validationkey")
+                or result.get("validationkey")
+            )
+            session_id = (
+                next(
+                    (
+                        value
+                        for name, value in cookies.items()
+                        if name.lower() == "jsessionid"
+                    ),
+                    "",
+                )
+                or data.get("jsessionid")
+                or result.get("jsessionid")
+            )
+            if not (validation_key or session_id) or not (
+                result.get("responsetime")
+                or data.get("responsetime")
+                or response.headers.get("Authorization")
+            ):
+                raise O2CloudAPIError("SAPI OAuth login did not establish a session")
+            if validation_key:
+                self.validation_key = str(validation_key)
+                self.cookies["validationkey"] = self.validation_key
+            if session_id:
+                self.cookies["JSESSIONID"] = str(session_id)
 
     @staticmethod
     def _unwrap_data(result: Any) -> Any:
@@ -131,7 +232,7 @@ class O2CloudClient:
         *,
         parse_in_executor: bool = False,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Make HTTP request.
 
         When ``parse_in_executor`` is set, a JSON body is parsed in a worker
@@ -139,6 +240,55 @@ class O2CloudClient:
         responses (e.g. listing tens of thousands of media items): parsing
         them inline would block the loop for seconds and starve other tasks.
         """
+        if self.oauth_tokens:
+            async with self._oauth_lock:
+                previous_tokens = self.oauth_tokens
+                try:
+                    return await self._request(
+                        method,
+                        self._session_url(url),
+                        parse_in_executor=parse_in_executor,
+                        **kwargs,
+                    )
+                except O2CloudAuthError as err:
+                    if err.status != 401 or not self.oauth_tokens.get("refresh_token"):
+                        raise
+                    if self.oauth_tokens == previous_tokens:
+                        try:
+                            await self._login_sapi()
+                        except O2CloudAuthError as login_err:
+                            if login_err.status != 401:
+                                raise
+                            try:
+                                tokens = await exchange_tokens(
+                                    self.session,
+                                    refresh_token=self.oauth_tokens["refresh_token"],
+                                )
+                            except OAuthError as refresh_err:
+                                if refresh_err.args[0] in (400, 401):
+                                    raise O2CloudAuthError(401) from refresh_err
+                                raise O2CloudAPIError(
+                                    "OAuth token refresh failed"
+                                ) from refresh_err
+                            self._update_tokens(tokens)
+                            await self._login_sapi()
+                    if not isinstance(
+                        kwargs.get("data"), (type(None), bytes, str, dict)
+                    ):
+                        raise O2CloudAPIError(
+                            "Session refreshed; streaming upload must be retried"
+                        ) from err
+                    return await self._request(
+                        method,
+                        self._session_url(url),
+                        parse_in_executor=parse_in_executor,
+                        **kwargs,
+                    )
+        return await self._request(
+            method, url, parse_in_executor=parse_in_executor, **kwargs
+        )
+
+    async def _request(self, method, url, *, parse_in_executor=False, **kwargs):
         if not self.session:
             raise RuntimeError("Session not initialized")
 
@@ -147,28 +297,33 @@ class O2CloudClient:
             headers.update(kwargs.pop("headers"))
 
         try:
-            _LOGGER.debug(f"Making {method} request to {url} with {len(self.cookies)} cookies")
-            
+            _LOGGER.debug(
+                "Making %s request to %s with %d cookies",
+                method,
+                urlsplit(url).path,
+                len(self.cookies),
+            )
+
             async with self.session.request(
                 method,
                 url,
                 headers=headers,
                 cookies=self.cookies,
-                timeout=aiohttp.ClientTimeout(total=kwargs.pop("timeout", REQUEST_TIMEOUT)),
+                timeout=aiohttp.ClientTimeout(
+                    total=kwargs.pop("timeout", REQUEST_TIMEOUT)
+                ),
                 **kwargs,
             ) as resp:
                 _LOGGER.debug(f"Response status: {resp.status}")
+                if self.oauth_tokens:
+                    self._update_tokens(
+                        rotated_tokens(
+                            resp.headers.get("Authorization", ""), self.oauth_tokens
+                        )
+                    )
 
                 if resp.status in (401, 403):
-                    text = await resp.text()
-                    _LOGGER.error(
-                        "Auth failed (status %s) on %s %s: %s",
-                        resp.status,
-                        method,
-                        url,
-                        text[:200],
-                    )
-                    raise O2CloudAuthError(f"Authentication failed: {resp.status}")
+                    raise O2CloudAuthError(resp.status)
 
                 if resp.status >= 400:
                     text = await resp.text()
@@ -187,12 +342,14 @@ class O2CloudClient:
                 else:
                     return {"data": await resp.text()}
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise O2CloudTimeoutError("Request timeout")
         except aiohttp.ClientError as e:
             raise O2CloudConnectionError(f"Connection error: {e}")
 
-    async def get_storage_space(self, include_soft_deleted: bool = False) -> Dict[str, Any]:
+    async def get_storage_space(
+        self, include_soft_deleted: bool = False
+    ) -> dict[str, Any]:
         """Get storage space."""
         query = self._build_query_params(
             action="get-storage-space",
@@ -214,7 +371,7 @@ class O2CloudClient:
             return result["data"]
         return result
 
-    async def get_all_folders(self) -> List[Dict[str, Any]]:
+    async def get_all_folders(self) -> list[dict[str, Any]]:
         """List ALL folders (flat list with id/name/parentid)."""
         query = self._build_query_params(action="get")
         url = f"{API_BASE_URL}media/folder?{query}"
@@ -224,9 +381,9 @@ class O2CloudClient:
             return data["folders"]
         return []
 
-    async def get_all_media(self) -> List[Dict[str, Any]]:
+    async def get_all_media(self) -> list[dict[str, Any]]:
         """List ALL files (paginated). Includes download url."""
-        all_items: List[Dict[str, Any]] = []
+        all_items: list[dict[str, Any]] = []
         offset = 0
         while True:
             query = self._build_query_params(
@@ -235,9 +392,7 @@ class O2CloudClient:
                 offset=offset,
             )
             url = f"{API_BASE_URL}media?{query}"
-            payload = {
-                "data": {"fields": ["name", "size", "etag", "folderid", "url"]}
-            }
+            payload = {"data": {"fields": ["name", "size", "etag", "folderid", "url"]}}
             # Parse off the event loop: a full page can carry thousands of
             # items and json parsing is CPU-bound.
             result = await self._make_request(
@@ -310,7 +465,7 @@ class O2CloudClient:
         remote_name: str,
         size: int,
         folder_id: int,
-        mtime: Optional[float] = None,
+        mtime: float | None = None,
     ) -> str:
         """Step 1: save metadata and return the media id."""
         now = _compact_iso(mtime)
@@ -400,8 +555,8 @@ class O2CloudClient:
         self,
         file_path: str,
         folder_id: int,
-        remote_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        remote_name: str | None = None,
+    ) -> dict[str, Any]:
         """Upload a file from disk (reads in executor, uploads in streaming)."""
         loop = asyncio.get_running_loop()
         if not remote_name:
@@ -410,9 +565,7 @@ class O2CloudClient:
         file_size = await loop.run_in_executor(None, os.path.getsize, file_path)
         mtime = await loop.run_in_executor(None, os.path.getmtime, file_path)
 
-        media_id = await self.upload_metadata(
-            remote_name, file_size, folder_id, mtime
-        )
+        media_id = await self.upload_metadata(remote_name, file_size, folder_id, mtime)
 
         async def _file_stream() -> AsyncIterator[bytes]:
             f = await loop.run_in_executor(None, open, file_path, "rb")
@@ -439,17 +592,21 @@ class O2CloudClient:
         """Download bytes in streaming from a signed media URL."""
         if not self.session:
             raise RuntimeError("Session not initialized")
+        headers = self._get_headers()
+        if urlsplit(url).hostname not in (
+            "cloud.o2online.es",
+            "upload.cloud.o2online.es",
+        ):
+            headers.pop("Authorization", None)
         async with self.session.get(
             url,
-            headers=self._get_headers(),
+            headers=headers,
             cookies=self.cookies,
             timeout=aiohttp.ClientTimeout(total=UPLOAD_TIMEOUT),
         ) as resp:
             if resp.status >= 400:
                 text = await resp.text()
-                raise O2CloudAPIError(
-                    f"Download error {resp.status}: {text[:200]}"
-                )
+                raise O2CloudAPIError(f"Download error {resp.status}: {text[:200]}")
             async for chunk in resp.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
                 yield chunk
 
@@ -464,7 +621,7 @@ class O2CloudClient:
         self,
         file_id: str,
         soft_delete: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete (move to trash) a file by its id."""
         query = self._build_query_params(
             action="softdelete" if soft_delete else "delete",
@@ -490,28 +647,22 @@ class O2CloudClient:
 class O2CloudException(Exception):
     """Base exception for O2 Cloud."""
 
-    pass
-
 
 class O2CloudAuthError(O2CloudException):
     """Authentication error."""
 
-    pass
+    def __init__(self, status):
+        self.status = status
+        super().__init__(f"Authentication failed: {status}")
 
 
 class O2CloudAPIError(O2CloudException):
     """API error."""
 
-    pass
-
 
 class O2CloudTimeoutError(O2CloudException):
     """Timeout error."""
 
-    pass
-
 
 class O2CloudConnectionError(O2CloudException):
     """Connection error."""
-
-    pass
