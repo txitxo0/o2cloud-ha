@@ -1,10 +1,12 @@
 <div align="center">
 
-# ☁️ O2 Cloud Backup para Home Assistant
+<a id="espanol"></a>
 
-### Tus copias de seguridad de Home Assistant, a salvo en tu nube de O2. Sin discos que se llenan, sin sustos. 🛟
+# ☁️ O2 & Movistar Cloud Backup para Home Assistant
 
-**🇪🇸 Español** · [🇬🇧 English](#-o2-cloud-backup-for-home-assistant-english)
+### Tus copias de seguridad de Home Assistant, a salvo en tu nube de O2 o Movistar. Sin discos que se llenan, sin sustos. 🛟
+
+**🇪🇸 Español** · [🇬🇧 English](#english)
 
 [![Validate](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?logo=homeassistantcommunitystore&logoColor=white)](https://hacs.xyz)
@@ -16,13 +18,13 @@
 ---
 
 ¿Se te llena el disco de Home Assistant con cada backup? 😅 Deja de sufrir: usa
-tu **O2 Cloud** (el almacenamiento en la nube de O2 / Telefónica) como destino
+tu **O2 Cloud o Movistar Cloud** como destino
 para tus **copias de seguridad**. Las creas desde Home Assistant como siempre y
 vuelan directas a la nube. 📦☁️
 
 **Lo que consigues:**
 
-- 📤 O2 Cloud aparece como una ubicación de backup **nativa** de Home Assistant
+- 📤 Tu nube aparece como una ubicación de backup **nativa** de Home Assistant
   (crear, subir, listar, descargar y borrar copias).
 - 📊 Sensores de cuota (total, usado, libre, %) para vigilar tu espacio de un vistazo.
 - 🇪🇸 Interfaz en español e inglés.
@@ -34,7 +36,7 @@ vuelan directas a la nube. 📦☁️
 
 > Esta integración **no recopila ni envía tus datos a ningún sitio**. Las
 > credenciales de sesión se usan **exclusivamente** para autenticarte contra tu
-> propia nube de O2 y se guardan en la configuración de Home Assistant. Protege
+> propia nube de O2 o Movistar y se guardan en la configuración de Home Assistant. Protege
 > tus copias de seguridad y no compartas los tokens ni la URL de retorno.
 
 ---
@@ -48,7 +50,7 @@ vuelan directas a la nube. 📦☁️
    ```
    https://github.com/txitxo0/o2cloud-ha
    ```
-3. Busca **"O2 Cloud"** en HACS, instálala y **reinicia Home Assistant**.
+3. Busca **"O2 & Movistar Cloud Backup"** en HACS, instálala y **reinicia Home Assistant**.
 
 ### Opción B — Manual
 
@@ -61,18 +63,19 @@ vuelan directas a la nube. 📦☁️
 
 ## 2. Añadir la integración
 
-1. **Ajustes → Dispositivos y servicios → Añadir integración → "O2 Cloud"**.
-2. Elige el nombre de la carpeta de backups (por defecto: `homeassistant`).
-3. Abre el enlace de acceso e inicia sesión en O2. Copia la URL completa de la
-  barra de direcciones después de iniciar sesión y pégala en Home Assistant.
-4. ¡Listo! Ya puedes usar O2 Cloud en **Ajustes → Sistema → Copias de
+1. **Ajustes → Dispositivos y servicios → Añadir integración → "O2 & Movistar Cloud Backup"**.
+2. Elige **O2 Cloud o Movistar Cloud** y la carpeta de backups (por defecto: `homeassistant`).
+3. Abre el enlace de acceso e inicia sesión con el proveedor elegido. Aparecerá
+  una página en blanco: es normal. Copia la URL completa de la barra de
+  direcciones y pégala en Home Assistant. Cuando termines, puedes cerrar la página.
+4. ¡Listo! Ya puedes usar la nube en **Ajustes → Sistema → Copias de
    seguridad**.
 
 ---
 
 ## ⏳ ¿La sesión caduca?
 
-La integración intenta renovar la sesión automáticamente. Si O2 revoca las
+La integración intenta renovar la sesión automáticamente. Si el proveedor revoca las
 credenciales, Home Assistant te pedirá repetir el acceso desde el navegador.
 Las instalaciones existentes con cookies siguen funcionando y pasan al nuevo
 método al reautenticarse.
@@ -88,7 +91,7 @@ método al reautenticarse.
 
 ## ⚠️ Aviso
 
-Esta integración usa la API interna de O2 Cloud (`cloud.o2online.es/sapi/`), que
+Esta integración usa las API internas de O2 y Movistar Cloud, que
 **no es oficial** y puede cambiar sin previo aviso. Proyecto de uso personal;
 revisa los Términos de Servicio de O2. Sin garantía.
 
@@ -113,11 +116,13 @@ MIT
 
 <div align="center">
 
-# ☁️ O2 Cloud Backup for Home Assistant (English)
+<a id="english"></a>
 
-### Your Home Assistant backups, safe in your O2 cloud. No more full disks, no more scares. 🛟
+# ☁️ O2 & Movistar Cloud Backup for Home Assistant (English)
 
-[🇪🇸 Español](#-o2-cloud-backup-para-home-assistant) · **🇬🇧 English**
+### Your Home Assistant backups, safe in your O2 or Movistar cloud. No more full disks, no more scares. 🛟
+
+[🇪🇸 Español](#espanol) · **🇬🇧 English**
 
 [![Validate](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/txitxo0/o2cloud-ha/actions/workflows/validate.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?logo=homeassistantcommunitystore&logoColor=white)](https://hacs.xyz)
@@ -129,19 +134,19 @@ MIT
 ---
 
 Tired of your Home Assistant disk filling up with every backup? 😅 Stop the pain:
-use your **O2 Cloud** (the O2 / Telefónica personal cloud storage) as a
+use your **O2 Cloud or Movistar Cloud** as a
 destination for your **backups**. Create them from Home Assistant as usual and
 they fly straight to the cloud. 📦☁️
 
 **What you get:**
 
-- 📤 O2 Cloud shows up as a **native** Home Assistant backup location
+- 📤 Your cloud shows up as a **native** Home Assistant backup location
   (create, upload, list, download and delete backups).
 - 📊 Quota sensors (total, used, free, %) to keep an eye on your space at a glance.
 - 🇪🇸 Spanish and English interface.
 - 🔒 Your credentials never leave your Home Assistant.
 
-> ℹ️ O2 Cloud is a Spanish service (O2 / Telefónica España), but this guide is
+> ℹ️ O2 and Movistar Cloud are Spanish services, but this guide is
 > provided in English so anyone can set it up.
 
 ---
@@ -149,7 +154,7 @@ they fly straight to the cloud. 📦☁️
 ## 🔒 About your privacy
 
 > This integration **does not collect or send your data anywhere**. The
-> session credentials are used **only** to authenticate against your own O2
+> session credentials are used **only** to authenticate against your own O2 or Movistar
 > cloud and are stored in Home Assistant's configuration. Protect your backups
 > and do not share the tokens or the callback URL.
 
@@ -164,7 +169,7 @@ they fly straight to the cloud. 📦☁️
    ```
    https://github.com/txitxo0/o2cloud-ha
    ```
-3. Search for **"O2 Cloud"** in HACS, install it and **restart Home Assistant**.
+3. Search for **"O2 & Movistar Cloud Backup"** in HACS, install it and **restart Home Assistant**.
 
 ### Option B — Manual
 
@@ -176,17 +181,18 @@ they fly straight to the cloud. 📦☁️
 
 ## 2. Add the integration
 
-1. **Settings → Devices & services → Add integration → "O2 Cloud"**.
-2. Choose the backup folder name (default: `homeassistant`).
-3. Open the sign-in link and log in to O2. Copy the complete URL from the
-  address bar after signing in and paste it into Home Assistant.
-4. Done! You can now use O2 Cloud under **Settings → System → Backups**.
+1. **Settings → Devices & services → Add integration → "O2 & Movistar Cloud Backup"**.
+2. Choose **O2 Cloud or Movistar Cloud** and the backup folder (default: `homeassistant`).
+3. Open the sign-in link and log in to your chosen provider. A blank page will
+  appear: this is normal. Copy the complete URL from the address bar and paste
+  it into Home Assistant. You can close the page once you are done.
+4. Done! You can now use your cloud under **Settings → System → Backups**.
 
 ---
 
 ## ⏳ Does the session expire?
 
-The integration attempts to renew the session automatically. If O2 revokes the
+The integration attempts to renew the session automatically. If the provider revokes the
 credentials, Home Assistant will ask you to sign in again. Existing cookie-based
 installations continue to work and switch to OAuth when re-authenticated.
 
@@ -201,7 +207,7 @@ installations continue to work and switch to OAuth when re-authenticated.
 
 ## ⚠️ Disclaimer
 
-This integration uses O2 Cloud's internal API (`cloud.o2online.es/sapi/`), which
+This integration uses O2 and Movistar Cloud's internal APIs, which
 is **not official** and may change without notice. Personal-use project; review
 O2's Terms of Service. No warranty.
 

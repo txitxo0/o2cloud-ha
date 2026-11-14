@@ -7,9 +7,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from o2pkg.oauth import (
-    CLIENT_ID,
+    OAUTH_PROVIDERS,
     REDIRECT_URI,
-    TOKEN_URL,
     authorization_header,
     build_login_url,
     exchange_tokens,
@@ -34,6 +33,23 @@ def test_login_url_uses_pkce_and_matching_state():
         )
         == "code"
     )
+
+
+@pytest.mark.parametrize("provider", ["o2", "movistar"])
+def test_provider_login_and_callback(provider):
+    settings = OAUTH_PROVIDERS[provider]
+    url, verifier, state = build_login_url(provider)
+    query = parse_qs(urlsplit(url).query)
+    assert url.startswith(settings["authorize_url"] + "?")
+    assert query["client_id"] == [settings["client_id"]]
+    assert query["redirect_uri"] == [settings["redirect_uri"]]
+    callback = (
+        settings["redirect_uri"] + "?" + urlencode({"code": "code", "state": state})
+    )
+    assert parse_callback(callback, state, provider) == "code"
+    other = "movistar" if provider == "o2" else "o2"
+    with pytest.raises(ValueError):
+        parse_callback(callback, state, other)
 
 
 @pytest.mark.parametrize(
@@ -68,7 +84,10 @@ def test_sapi_header_and_rotated_tokens():
 
 
 @pytest.mark.parametrize("refresh", [False, True])
-async def test_token_exchange_request(refresh):
+@pytest.mark.parametrize("provider", ["o2", "movistar"])
+async def test_token_exchange_request(refresh, provider):
+    settings = OAUTH_PROVIDERS[provider]
+
     class Response:
         status = 200
 
@@ -87,11 +106,11 @@ async def test_token_exchange_request(refresh):
 
     class Session:
         def post(self, url, **kwargs):
-            assert url == TOKEN_URL
+            assert url == settings["token_url"]
             assert (
                 base64.b64decode(kwargs["headers"]["Authorization"].split()[1])
                 .decode()
-                .startswith(CLIENT_ID + ":")
+                .startswith(settings["client_id"] + ":")
             )
             if refresh:
                 assert kwargs["data"]["grant_type"] == "refresh_token"
@@ -99,7 +118,7 @@ async def test_token_exchange_request(refresh):
             else:
                 assert kwargs["data"]["grant_type"] == "authorization_code"
                 assert kwargs["data"]["code_verifier"] == "verifier"
-                assert kwargs["data"]["redirect_uri"] == REDIRECT_URI
+                assert kwargs["data"]["redirect_uri"] == settings["redirect_uri"]
             return Response()
 
     tokens = await exchange_tokens(
@@ -109,6 +128,7 @@ async def test_token_exchange_request(refresh):
             if refresh
             else {"code": "code", "verifier": "verifier"}
         ),
+        provider=provider,
     )
     assert tokens["access_token"] == "new-access"
     assert tokens["refresh_token"] == "new-refresh"

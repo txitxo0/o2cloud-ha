@@ -2,15 +2,16 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configure O2 Cloud Backup",
-        "description": "Choose the folder for your backups.",
+        "title": "Configure Cloud Backup",
+        "description": "Choose your cloud provider and backup folder.",
         "data": {
+          "provider": "Cloud provider",
           "folder_name": "Backup folder name"
         }
       },
       "authorize": {
-        "title": "Sign in to O2 Cloud",
-        "description": "[Open the O2 login page]({auth_url}) and sign in. Copy the complete URL from the address bar after signing in and paste it below. Keep the URL private.",
+        "title": "Sign in to your cloud",
+        "description": "[Open the {provider} login page]({auth_url}) and sign in. A blank page will appear when you finish: this is normal. Copy the complete URL from the address bar and paste it below. Once the process is complete, you can close that page. Keep the URL private.",
         "data": {
           "callback_url": "URL after signing in"
         }
@@ -19,7 +20,7 @@
     "error": {
       "invalid_credentials": "Invalid credentials or failed connection",
       "invalid_callback": "Invalid URL or login session. Paste the complete URL from this login attempt.",
-      "cannot_connect": "Could not connect to O2 Cloud. Please try again.",
+      "cannot_connect": "Could not connect to the cloud. Please try again.",
       "missing_fields": "Paste a valid o2_credentials.json (must contain validation_key and user_agent)",
       "unknown": "Unexpected error"
     }
@@ -27,7 +28,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "O2 Cloud Backup Options",
+        "title": "Cloud Backup Options",
         "data": {
           "refresh_interval": "Quota refresh interval (minutes)",
           "include_soft_deleted": "Include soft-deleted files in quota calculation"
@@ -62,7 +63,7 @@
   "services": {
     "upload_backup": {
       "name": "Upload backup",
-      "description": "Upload a backup file to O2 Cloud",
+      "description": "Upload a backup file to the cloud",
       "fields": {
         "file_path": {
           "name": "File path",
@@ -70,7 +71,7 @@
         },
         "remote_name": {
           "name": "Remote name",
-          "description": "Optional: custom name for the file in O2 Cloud"
+          "description": "Optional: custom name for the file in the cloud"
         }
       }
     },

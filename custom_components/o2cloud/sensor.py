@@ -8,7 +8,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import (
+    CLOUD_PROVIDERS,
+    CONF_PROVIDER,
+    CONF_UNIQUE_ENTITIES,
+    DEFAULT_PROVIDER,
+    DOMAIN,
+)
 from .coordinator import O2CloudCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,14 +56,19 @@ class O2CloudSensorBase(CoordinatorEntity):
         super().__init__(coordinator)
         self.config_entry = config_entry
         self._attr_has_entity_name = True
+        if config_entry.data.get(CONF_UNIQUE_ENTITIES):
+            self._attr_unique_id = f"{config_entry.entry_id}_{self._attr_unique_id}"
 
     @property
     def device_info(self):
         """Return device info."""
+        provider = CLOUD_PROVIDERS[
+            self.config_entry.data.get(CONF_PROVIDER, DEFAULT_PROVIDER)
+        ]
         return {
             "identifiers": {(DOMAIN, self.config_entry.entry_id)},
-            "name": "O2 Cloud",
-            "manufacturer": "O2 España",
+            "name": provider["name"],
+            "manufacturer": provider["manufacturer"],
         }
 
 
@@ -146,9 +157,8 @@ class O2CloudLastUpdateSensor(O2CloudSensorBase, SensorEntity):
         """Return value."""
         if self.coordinator.data:
             import datetime
+
             timestamp = self.coordinator.data.get("last_update")
             if timestamp:
-                return datetime.datetime.fromtimestamp(
-                    timestamp
-                ).isoformat()
+                return datetime.datetime.fromtimestamp(timestamp).isoformat()
         return None

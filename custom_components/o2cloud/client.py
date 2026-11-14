@@ -12,9 +12,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import aiohttp
 
 from .const import (
-    API_BASE_URL,
+    CLOUD_PROVIDERS,
+    DEFAULT_PROVIDER,
     REQUEST_TIMEOUT,
-    UPLOAD_BASE_URL,
     UPLOAD_TIMEOUT,
 )
 from .oauth import OAuthError, authorization_header, exchange_tokens, rotated_tokens
@@ -66,6 +66,7 @@ class O2CloudClient:
         oauth_tokens: dict | None = None,
         token_update=None,
         device_id: str = "",
+        provider: str = DEFAULT_PROVIDER,
     ):
         """Initialize client."""
         self.validation_key = validation_key
@@ -76,6 +77,12 @@ class O2CloudClient:
         self.oauth_tokens = oauth_tokens
         self.token_update = token_update
         self.device_id = device_id
+        self.provider = provider
+        settings = CLOUD_PROVIDERS[provider]
+        self.host = settings["host"]
+        self.upload_host = settings["upload_host"]
+        self.api_base_url = f"https://{self.host}/sapi/"
+        self.upload_base_url = f"https://{self.upload_host}/sapi/upload/file"
         self._oauth_lock = asyncio.Lock()
 
         _LOGGER.debug("O2CloudClient initialized with %d cookies", len(self.cookies))
@@ -106,7 +113,7 @@ class O2CloudClient:
             "User-Agent": self.user_agent,
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://cloud.o2online.es/",
+            "Referer": f"https://{self.host}/",
             "X-Requested-With": "XMLHttpRequest",
         }
         if self.oauth_tokens:
@@ -131,8 +138,8 @@ class O2CloudClient:
     def _session_url(self, url: str) -> str:
         parts = urlsplit(url)
         if not self.validation_key or parts.hostname not in (
-            "cloud.o2online.es",
-            "upload.cloud.o2online.es",
+            self.host,
+            self.upload_host,
         ):
             return url
         params = [
@@ -149,7 +156,7 @@ class O2CloudClient:
             raise RuntimeError("Session not initialized")
         async with self.session.request(
             "GET",
-            f"{API_BASE_URL}login/oauth?action=login&responsetime=true",
+            f"{self.api_base_url}login/oauth?action=login&responsetime=true",
             headers=self._get_headers(),
             cookies=self.cookies,
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
@@ -263,6 +270,7 @@ class O2CloudClient:
                                 tokens = await exchange_tokens(
                                     self.session,
                                     refresh_token=self.oauth_tokens["refresh_token"],
+                                    provider=self.provider,
                                 )
                             except OAuthError as refresh_err:
                                 if refresh_err.args[0] in (400, 401):
@@ -355,7 +363,7 @@ class O2CloudClient:
             action="get-storage-space",
             softdeleted="true" if include_soft_deleted else "false",
         )
-        url = f"{API_BASE_URL}media?{query}"
+        url = f"{self.api_base_url}media?{query}"
 
         result = await self._make_request("GET", url)
 
@@ -374,7 +382,7 @@ class O2CloudClient:
     async def get_all_folders(self) -> list[dict[str, Any]]:
         """List ALL folders (flat list with id/name/parentid)."""
         query = self._build_query_params(action="get")
-        url = f"{API_BASE_URL}media/folder?{query}"
+        url = f"{self.api_base_url}media/folder?{query}"
         result = await self._make_request("POST", url)
         data = self._unwrap_data(result)
         if isinstance(data, dict) and isinstance(data.get("folders"), list):
@@ -391,7 +399,7 @@ class O2CloudClient:
                 limit=MEDIA_PAGE_SIZE,
                 offset=offset,
             )
-            url = f"{API_BASE_URL}media?{query}"
+            url = f"{self.api_base_url}media?{query}"
             payload = {"data": {"fields": ["name", "size", "etag", "folderid", "url"]}}
             # Parse off the event loop: a full page can carry thousands of
             # items and json parsing is CPU-bound.
@@ -414,7 +422,7 @@ class O2CloudClient:
         """Create folder and return its numeric id."""
         now = _compact_iso()
         query = self._build_query_params(action="save")
-        url = f"{API_BASE_URL}media/folder?{query}"
+        url = f"{self.api_base_url}media/folder?{query}"
         payload = {
             "data": {
                 "creationdate": now,
@@ -484,7 +492,7 @@ class O2CloudClient:
             responsetime="true",
             lastupdate="true",
         )
-        meta_url = f"{API_BASE_URL}upload/file?{query}"
+        meta_url = f"{self.api_base_url}upload/file?{query}"
         meta_body = json.dumps(metadata).encode("utf-8")
         meta_result = await self._make_request(
             "POST",
@@ -531,7 +539,7 @@ class O2CloudClient:
             lastupdate="true",
             acceptasynchronous="true",
         )
-        upload_url = f"{UPLOAD_BASE_URL}?{query}"
+        upload_url = f"{self.upload_base_url}?{query}"
         headers = {
             "Content-Type": "application/octet-stream",
             "x-funambol-file-size": str(size),
@@ -593,15 +601,17 @@ class O2CloudClient:
         if not self.session:
             raise RuntimeError("Session not initialized")
         headers = self._get_headers()
-        if urlsplit(url).hostname not in (
-            "cloud.o2online.es",
-            "upload.cloud.o2online.es",
-        ):
+        parts = urlsplit(url)
+        trusted = parts.scheme == "https" and parts.hostname in (
+            self.host,
+            self.upload_host,
+        )
+        if not trusted:
             headers.pop("Authorization", None)
         async with self.session.get(
             url,
             headers=headers,
-            cookies=self.cookies,
+            cookies=self.cookies if trusted else {},
             timeout=aiohttp.ClientTimeout(total=UPLOAD_TIMEOUT),
         ) as resp:
             if resp.status >= 400:
@@ -627,7 +637,7 @@ class O2CloudClient:
             action="softdelete" if soft_delete else "delete",
             id=str(file_id),
         )
-        url = f"{API_BASE_URL}media?{query}"
+        url = f"{self.api_base_url}media?{query}"
         return await self._make_request("POST", url)
 
     async def test_connection(self) -> bool:

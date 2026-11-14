@@ -12,15 +12,19 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .client import O2CloudClient
 from .const import (
+    CLOUD_PROVIDERS,
     CONF_COOKIES,
     CONF_DEVICE_ID,
     CONF_FOLDER_ID,
     CONF_FOLDER_NAME,
     CONF_INCLUDE_SOFT_DELETED,
     CONF_OAUTH_TOKENS,
+    CONF_PROVIDER,
     CONF_REFRESH_INTERVAL,
+    CONF_UNIQUE_ENTITIES,
     CONF_USER_AGENT,
     CONF_VALIDATION_KEY,
+    DEFAULT_PROVIDER,
     DOMAIN,
 )
 from .oauth import (
@@ -45,11 +49,15 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the user configuration step."""
         if user_input is not None:
             self._folder_name = user_input.get(CONF_FOLDER_NAME, "homeassistant")
+            self._provider = user_input.get(CONF_PROVIDER, DEFAULT_PROVIDER)
             return await self.async_step_authorize()
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Required(CONF_PROVIDER, default=DEFAULT_PROVIDER): vol.In(
+                        {key: value["name"] for key, value in CLOUD_PROVIDERS.items()}
+                    ),
                     vol.Optional(CONF_FOLDER_NAME, default="homeassistant"): str,
                 }
             ),
@@ -60,19 +68,24 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> dict[str, Any]:
         """Handle reauthentication."""
         self._reauth_entry = self._get_reauth_entry()
+        self._provider = self._reauth_entry.data.get(CONF_PROVIDER, DEFAULT_PROVIDER)
         return await self.async_step_authorize()
 
     async def async_step_authorize(self, user_input=None):
         """Authorize in the provider's browser and paste the callback URL."""
         errors = {}
         if not hasattr(self, "_auth_url"):
-            self._auth_url, self._verifier, self._state = build_login_url()
+            self._auth_url, self._verifier, self._state = build_login_url(
+                self._provider
+            )
         if user_input is not None:
             try:
-                code = parse_callback(user_input["callback_url"], self._state)
+                code = parse_callback(
+                    user_input["callback_url"], self._state, self._provider
+                )
                 session = async_get_clientsession(self.hass)
                 tokens = await exchange_tokens(
-                    session, code=code, verifier=self._verifier
+                    session, code=code, verifier=self._verifier, provider=self._provider
                 )
                 if not tokens["refresh_token"]:
                     raise OAuthError("no refresh token")
@@ -84,6 +97,7 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     session=session,
                     oauth_tokens=tokens,
                     device_id=device_id,
+                    provider=self._provider,
                 )
                 if not await client.test_connection():
                     _LOGGER.warning(
@@ -92,6 +106,7 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_credentials"
                 else:
                     data = {
+                        CONF_PROVIDER: self._provider,
                         CONF_VALIDATION_KEY: client.validation_key,
                         CONF_COOKIES: json.dumps(client.cookies),
                         CONF_USER_AGENT: SAPI_USER_AGENT,
@@ -104,9 +119,16 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             entry, data_updates=data
                         )
                     data.update(
-                        {CONF_FOLDER_NAME: self._folder_name, CONF_FOLDER_ID: "root"}
+                        {
+                            CONF_FOLDER_NAME: self._folder_name,
+                            CONF_FOLDER_ID: "root",
+                            CONF_UNIQUE_ENTITIES: True,
+                        }
                     )
-                    return self.async_create_entry(title="O2 Cloud Backup", data=data)
+                    return self.async_create_entry(
+                        title=f"{CLOUD_PROVIDERS[self._provider]['name']} Backup",
+                        data=data,
+                    )
             except ValueError:
                 errors["base"] = "invalid_callback"
             except OAuthError as err:
@@ -116,11 +138,16 @@ class O2CloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("O2 Cloud authorization failed")
                 errors["base"] = "cannot_connect"
             if errors.get("base") != "invalid_callback":
-                self._auth_url, self._verifier, self._state = build_login_url()
+                self._auth_url, self._verifier, self._state = build_login_url(
+                    self._provider
+                )
         return self.async_show_form(
             step_id="authorize",
             data_schema=vol.Schema({vol.Required("callback_url"): str}),
-            description_placeholders={"auth_url": self._auth_url},
+            description_placeholders={
+                "auth_url": self._auth_url,
+                "provider": CLOUD_PROVIDERS[self._provider]["name"],
+            },
             errors=errors,
         )
 

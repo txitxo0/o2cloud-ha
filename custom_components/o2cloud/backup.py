@@ -23,7 +23,14 @@ from .client import (
     O2CloudClient,
     O2CloudTimeoutError,
 )
-from .const import CONF_MAX_UPLOAD_SIZE_MB, DEFAULT_MAX_UPLOAD_SIZE_MB, DOMAIN
+from .const import (
+    CLOUD_PROVIDERS,
+    CONF_MAX_UPLOAD_SIZE_MB,
+    CONF_PROVIDER,
+    DEFAULT_MAX_UPLOAD_SIZE_MB,
+    DEFAULT_PROVIDER,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -150,7 +157,8 @@ class O2CloudBackupAgent(BackupAgent):
         if "_backup_lock" not in data:
             data["_backup_lock"] = asyncio.Lock()
 
-        self.name = "O2 Cloud Backup"
+        provider = data.get(CONF_PROVIDER, DEFAULT_PROVIDER)
+        self.name = f"{CLOUD_PROVIDERS[provider]['name']} Backup"
         self.unique_id = entry_id
 
     @property

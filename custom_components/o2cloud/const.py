@@ -2,6 +2,23 @@
 
 DOMAIN = "o2cloud"
 CONF_VALIDATION_KEY = "validation_key"
+CONF_PROVIDER = "provider"
+CONF_UNIQUE_ENTITIES = "unique_entities"
+DEFAULT_PROVIDER = "o2"
+CLOUD_PROVIDERS = {
+    "o2": {
+        "name": "O2 Cloud",
+        "manufacturer": "O2 España",
+        "host": "cloud.o2online.es",
+        "upload_host": "upload.cloud.o2online.es",
+    },
+    "movistar": {
+        "name": "Movistar Cloud",
+        "manufacturer": "Movistar",
+        "host": "micloud.movistar.es",
+        "upload_host": "upload.micloud.movistar.es",
+    },
+}
 CONF_OAUTH_TOKENS = "oauth_tokens"
 CONF_DEVICE_ID = "device_id"
 CONF_COOKIES = "cookies"

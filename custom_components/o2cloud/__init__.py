@@ -16,8 +16,10 @@ from .const import (
     CONF_FOLDER_ID,
     CONF_FOLDER_NAME,
     CONF_OAUTH_TOKENS,
+    CONF_PROVIDER,
     CONF_USER_AGENT,
     CONF_VALIDATION_KEY,
+    DEFAULT_PROVIDER,
     DOMAIN,
 )
 from .coordinator import O2CloudCoordinator
@@ -69,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         oauth_tokens=entry.data.get(CONF_OAUTH_TOKENS),
         token_update=update_tokens,
         device_id=entry.data.get(CONF_DEVICE_ID, ""),
+        provider=entry.data.get(CONF_PROVIDER, DEFAULT_PROVIDER),
     )
 
     # Create coordinator
@@ -80,6 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "folder_id": entry.data.get(CONF_FOLDER_ID, "root"),
         "folder_name": entry.data.get(CONF_FOLDER_NAME, "homeassistant"),
+        CONF_PROVIDER: entry.data.get(CONF_PROVIDER, DEFAULT_PROVIDER),
     }
 
     # Set up platforms

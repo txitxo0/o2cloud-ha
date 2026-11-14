@@ -52,6 +52,9 @@ class _FakeSession:
         self.requests.append((method, url, kwargs))
         return self._responses.pop(0)
 
+    def get(self, url, **kwargs):
+        return self.request("GET", url, **kwargs)
+
 
 def _page(items):
     """Build a SAPI media page payload: {"data": {"media": [...]}}."""
@@ -164,8 +167,9 @@ async def test_oauth_401_refreshes_and_retries(monkeypatch):
     saved = []
     client = O2CloudClient("", {}, "ua", session, tokens, saved.append, "device")
 
-    async def refresh(session, *, refresh_token):
+    async def refresh(session, *, refresh_token, provider):
         assert refresh_token == "refresh"
+        assert provider == "o2"
         return refreshed
 
     monkeypatch.setattr(sys.modules["o2pkg.client"], "exchange_tokens", refresh)
@@ -268,7 +272,7 @@ async def test_streaming_upload_is_not_replayed_after_refresh(monkeypatch):
     saved = []
     client = O2CloudClient("", {}, "ua", session, tokens, saved.append, "device")
 
-    async def refresh(session, *, refresh_token):
+    async def refresh(session, *, refresh_token, provider):
         return refreshed
 
     async def stream():
@@ -279,3 +283,102 @@ async def test_streaming_upload_is_not_replayed_after_refresh(monkeypatch):
         await client.upload_stream("123", 4, stream())
     assert saved == [refreshed]
     assert len(session.requests) == 3
+
+
+@pytest.mark.parametrize(
+    "provider,host,upload",
+    [
+        ("o2", "cloud.o2online.es", "upload.cloud.o2online.es"),
+        ("movistar", "micloud.movistar.es", "upload.micloud.movistar.es"),
+    ],
+)
+async def test_provider_routes_sapi_and_upload(provider, host, upload):
+    tokens = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "expires_in": "3600",
+        "last_refresh_date": 1700000000000,
+    }
+    session = _FakeSession(
+        [
+            _FakeResponse(200, {"data": {"used": 1}}),
+            _FakeResponse(200, {"data": {"id": "123"}}),
+            _FakeResponse(200, {}),
+        ]
+    )
+    client = O2CloudClient("key", {}, "ua", session, tokens, None, "device", provider)
+
+    async def stream():
+        yield b"data"
+
+    await client.get_storage_space()
+    await client.upload_metadata("backup.tar", 4, 1)
+    await client.upload_stream("123", 4, stream())
+    assert [urlparse(request[1]).hostname for request in session.requests] == [
+        host,
+        host,
+        upload,
+    ]
+    assert session.requests[0][2]["headers"]["Referer"] == f"https://{host}/"
+
+
+@pytest.mark.parametrize(
+    "provider,host", [("o2", "cloud.o2online.es"), ("movistar", "micloud.movistar.es")]
+)
+async def test_provider_download_only_sends_authorization_to_own_host(provider, host):
+    tokens = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "expires_in": "3600",
+        "last_refresh_date": 1700000000000,
+    }
+    responses = [_FakeResponse(200, {}), _FakeResponse(200, {})]
+
+    class Content:
+        async def iter_chunked(self, size):
+            yield b"data"
+
+    for response in responses:
+        response.content = Content()
+    session = _FakeSession(responses)
+    client = O2CloudClient(
+        "", {"JSESSIONID": "session"}, "ua", session, tokens, None, "device", provider
+    )
+    await client.download_bytes(f"https://{host}/file")
+    await client.download_bytes("https://other.example/file")
+    assert "Authorization" in session.requests[0][2]["headers"]
+    assert "Authorization" not in session.requests[1][2]["headers"]
+    assert session.requests[0][2]["cookies"] == {"JSESSIONID": "session"}
+    assert session.requests[1][2]["cookies"] == {}
+
+
+async def test_movistar_session_refresh_uses_movistar_oauth(monkeypatch):
+    tokens = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "expires_in": "3600",
+        "last_refresh_date": 1700000000000,
+    }
+    login = _FakeResponse(200, {"responsetime": 1700000000000})
+    login.cookies["validationkey"] = "key"
+    session = _FakeSession(
+        [
+            _FakeResponse(401, {}),
+            _FakeResponse(401, {}),
+            login,
+            _FakeResponse(200, _page([])),
+        ]
+    )
+    client = O2CloudClient("", {}, "ua", session, tokens, None, "device", "movistar")
+
+    async def refresh(session, *, refresh_token, provider):
+        assert provider == "movistar"
+        return {**tokens, "access_token": "new"}
+
+    monkeypatch.setattr(sys.modules["o2pkg.client"], "exchange_tokens", refresh)
+    await client.get_all_media()
+    assert all(
+        urlparse(request[1]).hostname == "micloud.movistar.es"
+        for request in session.requests
+    )
+    assert parse_qs(urlparse(session.requests[-1][1]).query)["validationkey"] == ["key"]

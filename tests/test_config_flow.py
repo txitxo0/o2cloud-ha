@@ -6,7 +6,7 @@ import types
 from urllib.parse import urlencode
 
 import pytest
-from o2pkg.oauth import REDIRECT_URI
+from o2pkg.oauth import OAUTH_PROVIDERS, REDIRECT_URI
 
 
 @pytest.fixture
@@ -50,7 +50,8 @@ def flow_module(monkeypatch):
 
 
 @pytest.mark.parametrize("reauth", [False, True])
-async def test_browser_flow_and_reauth(flow_module, monkeypatch, reauth):
+@pytest.mark.parametrize("provider", ["o2", "movistar"])
+async def test_browser_flow_and_reauth(flow_module, monkeypatch, reauth, provider):
     tokens = {
         "access_token": "access",
         "refresh_token": "refresh",
@@ -58,7 +59,7 @@ async def test_browser_flow_and_reauth(flow_module, monkeypatch, reauth):
         "last_refresh_date": 1700000000000,
     }
 
-    async def exchange(session, *, code, verifier):
+    async def exchange(session, *, code, verifier, provider):
         assert code == "code"
         assert verifier
         return tokens
@@ -76,24 +77,40 @@ async def test_browser_flow_and_reauth(flow_module, monkeypatch, reauth):
     monkeypatch.setattr(flow_module, "O2CloudClient", Client)
     flow = flow_module.O2CloudConfigFlow()
     flow.hass = types.SimpleNamespace(session=object())
-    flow.entry = object()
+    flow.entry = types.SimpleNamespace(data={"provider": provider})
     if reauth:
         form = await flow.async_step_reauth()
     else:
-        form = await flow.async_step_user({"folder_name": "backups"})
+        form = await flow.async_step_user(
+            {"folder_name": "backups", "provider": provider}
+        )
     assert form["step_id"] == "authorize"
+    assert form["description_placeholders"]["provider"] == (
+        "O2 Cloud" if provider == "o2" else "Movistar Cloud"
+    )
+    assert form["description_placeholders"]["auth_url"].startswith(
+        OAUTH_PROVIDERS[provider]["authorize_url"] + "?"
+    )
     invalid = await flow.async_step_authorize(
         {"callback_url": "https://evil.example/?code=code"}
     )
     assert invalid["errors"]["base"] == "invalid_callback"
-    callback = REDIRECT_URI + "?" + urlencode({"code": "code", "state": flow._state})
+    callback = (
+        OAUTH_PROVIDERS[provider]["redirect_uri"]
+        + "?"
+        + urlencode({"code": "code", "state": flow._state})
+    )
     result = await flow.async_step_authorize({"callback_url": callback})
     data = result["data_updates"] if reauth else result["data"]
     assert data["oauth_tokens"] == tokens
+    assert data["provider"] == provider
     assert data["validation_key"] == "session-key"
     assert result["type"] == ("abort" if reauth else "create_entry")
     if not reauth:
         assert data["folder_name"] == "backups"
+        assert data["unique_entities"] is True
+    else:
+        assert "unique_entities" not in data
 
 
 @pytest.mark.parametrize("failure", ["exchange", "missing_refresh", "sapi"])
@@ -107,7 +124,7 @@ async def test_authorization_failure_logs_stage_without_secrets(
         "last_refresh_date": 1700000000000,
     }
 
-    async def exchange(session, *, code, verifier):
+    async def exchange(session, *, code, verifier, provider):
         if failure == "exchange":
             raise flow_module.OAuthError(403)
         return tokens
@@ -138,3 +155,13 @@ async def test_authorization_failure_logs_stage_without_secrets(
     assert "secret-code" not in caplog.text
     assert "secret-access" not in caplog.text
     assert "secret-refresh" not in caplog.text
+
+
+async def test_reauth_legacy_entry_defaults_to_o2(flow_module):
+    flow = flow_module.O2CloudConfigFlow()
+    flow.entry = types.SimpleNamespace(data={})
+    form = await flow.async_step_reauth()
+    assert flow._provider == "o2"
+    assert form["description_placeholders"]["auth_url"].startswith(
+        OAUTH_PROVIDERS["o2"]["authorize_url"]
+    )

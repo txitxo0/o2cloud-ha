@@ -2,15 +2,16 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configurar O2 Cloud Backup",
-        "description": "Elige la carpeta para tus copias de seguridad.",
+        "title": "Configurar Cloud Backup",
+        "description": "Elige tu proveedor de nube y la carpeta para tus copias de seguridad.",
         "data": {
+          "provider": "Proveedor de nube",
           "folder_name": "Nombre de carpeta de backups"
         }
       },
       "authorize": {
-        "title": "Iniciar sesión en O2 Cloud",
-        "description": "[Abre la página de acceso de O2]({auth_url}) e inicia sesión. Copia la URL completa de la barra de direcciones después de iniciar sesión y pégala abajo. No compartas esa URL.",
+        "title": "Iniciar sesión en tu nube",
+        "description": "[Abre la página de acceso de {provider}]({auth_url}) e inicia sesión. Al terminar aparecerá una página en blanco: es normal. Copia la URL completa de la barra de direcciones y pégala abajo. Una vez completado el proceso, puedes cerrar esa página. No compartas la URL.",
         "data": {
           "callback_url": "URL después de iniciar sesión"
         }
@@ -19,7 +20,7 @@
     "error": {
       "invalid_credentials": "Credenciales inválidas o conexión fallida",
       "invalid_callback": "URL o sesión de acceso no válida. Pega la URL completa de este intento de acceso.",
-      "cannot_connect": "No se ha podido conectar con O2 Cloud. Inténtalo de nuevo.",
+      "cannot_connect": "No se ha podido conectar con la nube. Inténtalo de nuevo.",
       "missing_fields": "Pega un o2_credentials.json válido (debe contener validation_key y user_agent)",
       "unknown": "Error inesperado"
     }
@@ -27,7 +28,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opciones de O2 Cloud Backup",
+        "title": "Opciones de Cloud Backup",
         "data": {
           "refresh_interval": "Intervalo de actualización de cuota (minutos)",
           "include_soft_deleted": "Incluir archivos eliminados en el cálculo de cuota"
@@ -62,7 +63,7 @@
   "services": {
     "upload_backup": {
       "name": "Subir backup",
-      "description": "Subir un archivo de backup a O2 Cloud",
+      "description": "Subir un archivo de backup a la nube",
       "fields": {
         "file_path": {
           "name": "Ruta del archivo",
@@ -70,7 +71,7 @@
         },
         "remote_name": {
           "name": "Nombre remoto",
-          "description": "Opcional: nombre personalizado del archivo en O2 Cloud"
+          "description": "Opcional: nombre personalizado del archivo en la nube"
         }
       }
     },
