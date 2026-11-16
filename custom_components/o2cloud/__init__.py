@@ -23,6 +23,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import O2CloudCoordinator
+from .oauth import SAPI_USER_AGENT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,7 +67,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = O2CloudClient(
         validation_key=entry.data.get(CONF_VALIDATION_KEY, ""),
         cookies=cookies,
-        user_agent=entry.data[CONF_USER_AGENT],
+        # Entries created before 2026-11-15 stored a browser UA that SAPI now rejects.
+        user_agent=(
+            SAPI_USER_AGENT
+            if entry.data.get(CONF_OAUTH_TOKENS)
+            else entry.data[CONF_USER_AGENT]
+        ),
         session=session,
         oauth_tokens=entry.data.get(CONF_OAUTH_TOKENS),
         token_update=update_tokens,

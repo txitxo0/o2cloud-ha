@@ -33,7 +33,8 @@ OAUTH_PROVIDERS = {
     },
 }
 DESKTOP_USER_AGENT = "omh windows client 32.1.3.0"
-SAPI_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0"
+# Since 2026-11-15 SAPI rejects OAuth logins (401) unless the desktop client UA is sent.
+SAPI_USER_AGENT = DESKTOP_USER_AGENT
 
 
 def build_login_url(provider: str = "o2") -> tuple[str, str, str]:
